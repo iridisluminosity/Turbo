@@ -1313,812 +1313,762 @@ end
 
 print("Character Lock TRIPLO INSTANTANEO | CFrame 3x | Root 360")
 
+
 -- ============================================================
--- TURBO GUI  v2
+-- TURBO GUI v4  |  Reference framework + Save/Load
 -- ============================================================
 
-local TurboConnections = {}
+local GuiService = game:GetService("GuiService")
+local HttpService = game:GetService("HttpService")
 
-local function turboDisconnectAll()
-    for _, c in ipairs(TurboConnections) do
-        pcall(function() c:Disconnect() end)
-    end
-    table.clear(TurboConnections)
-end
+local PlayerGui = player:WaitForChild("PlayerGui")
 
-local function turboConnect(signal, fn)
-    local c = signal:Connect(fn)
-    table.insert(TurboConnections, c)
-    return c
-end
-
-local TurboTheme = {
-    Background = Color3.fromRGB(14, 14, 22),
-    Panel      = Color3.fromRGB(20, 22, 34),
-    Panel2     = Color3.fromRGB(26, 28, 44),
-    Panel3     = Color3.fromRGB(32, 34, 52),
-    Stroke     = Color3.fromRGB(58, 62, 88),
-    Text       = Color3.fromRGB(242, 244, 252),
-    SubText    = Color3.fromRGB(148, 154, 178),
-    Accent     = Color3.fromRGB(138, 92, 255),
-    Accent2    = Color3.fromRGB(168, 132, 255),
-    Green      = Color3.fromRGB(72, 210, 130),
-    Red        = Color3.fromRGB(235, 85, 100),
-    Orange     = Color3.fromRGB(255, 160, 70),
-    Blue       = Color3.fromRGB(70, 150, 255),
+-- Themes
+local Themes = {
+    Red = {
+        Background = Color3.fromRGB(18, 15, 16),
+        Panel = Color3.fromRGB(25, 20, 21),
+        Panel2 = Color3.fromRGB(32, 25, 27),
+        Element = Color3.fromRGB(38, 29, 31),
+        Stroke = Color3.fromRGB(65, 50, 53),
+        Text = Color3.fromRGB(242, 240, 240),
+        SubText = Color3.fromRGB(155, 145, 148),
+        Accent = Color3.fromRGB(230, 70, 85),
+        AccentDark = Color3.fromRGB(185, 45, 60),
+        Green = Color3.fromRGB(75, 205, 125),
+        Red = Color3.fromRGB(225, 75, 90),
+    },
+    Purple = {
+        Background = Color3.fromRGB(16, 16, 19),
+        Panel = Color3.fromRGB(22, 22, 26),
+        Panel2 = Color3.fromRGB(28, 28, 33),
+        Element = Color3.fromRGB(32, 32, 38),
+        Stroke = Color3.fromRGB(55, 55, 62),
+        Text = Color3.fromRGB(240, 240, 243),
+        SubText = Color3.fromRGB(145, 145, 153),
+        Accent = Color3.fromRGB(150, 80, 255),
+        AccentDark = Color3.fromRGB(115, 55, 205),
+        Green = Color3.fromRGB(75, 205, 125),
+        Red = Color3.fromRGB(225, 75, 90),
+    },
+    Blue = {
+        Background = Color3.fromRGB(15, 17, 20),
+        Panel = Color3.fromRGB(21, 24, 29),
+        Panel2 = Color3.fromRGB(27, 30, 36),
+        Element = Color3.fromRGB(32, 36, 43),
+        Stroke = Color3.fromRGB(55, 61, 70),
+        Text = Color3.fromRGB(240, 242, 245),
+        SubText = Color3.fromRGB(145, 151, 160),
+        Accent = Color3.fromRGB(70, 145, 255),
+        AccentDark = Color3.fromRGB(45, 105, 205),
+        Green = Color3.fromRGB(75, 205, 125),
+        Red = Color3.fromRGB(225, 75, 90),
+    },
 }
 
-local function new(className, props, parent)
-    local obj = Instance.new(className)
-    for k, v in pairs(props or {}) do
-        obj[k] = v
-    end
-    if parent then obj.Parent = parent end
-    return obj
+local CurrentThemeName = "Red"
+local Theme = Themes[CurrentThemeName]
+
+-- Clean old
+local old = PlayerGui:FindFirstChild("Turbo")
+if old then old:Destroy() end
+
+local function New(class, props, parent)
+    local o = Instance.new(class)
+    for k, v in pairs(props or {}) do o[k] = v end
+    if parent then o.Parent = parent end
+    return o
 end
 
-local function corner(parent, radius)
-    return new("UICorner", {CornerRadius = UDim.new(0, radius or 8)}, parent)
+local function Corner(p, r)
+    return New("UICorner", {CornerRadius = UDim.new(0, r or 7)}, p)
 end
 
-local function stroke(parent, color, thickness)
-    return new("UIStroke", {
-        Color = color or TurboTheme.Stroke,
-        Thickness = thickness or 1,
-        Transparency = 0,
-    }, parent)
+local function Stroke(p, c, t)
+    return New("UIStroke", {Color = c or Theme.Stroke, Thickness = t or 1}, p)
 end
 
-local function padding(parent, l, r, t, b)
-    return new("UIPadding", {
-        PaddingLeft   = UDim.new(0, l or 0),
-        PaddingRight  = UDim.new(0, r or l or 0),
-        PaddingTop    = UDim.new(0, t or l or 0),
-        PaddingBottom = UDim.new(0, b or t or l or 0),
-    }, parent)
+local function Tween(obj, props, dur)
+    TweenService:Create(obj, TweenInfo.new(dur or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
 end
 
-local function label(parent, text, size, color, bold)
-    return new("TextLabel", {
+local function Label(parent, text, size, color, bold)
+    return New("TextLabel", {
         BackgroundTransparency = 1,
         Text = text,
-        TextColor3 = color or TurboTheme.Text,
+        TextColor3 = color or Theme.Text,
         TextSize = size or 13,
         Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
-        TextTruncate = Enum.TextTruncate.AtEnd,
+        BorderSizePixel = 0,
     }, parent)
 end
 
-local playerGui = player:WaitForChild("PlayerGui")
-local old = playerGui:FindFirstChild("Turbo")
-if old then old:Destroy() end
-
-local screen = new("ScreenGui", {
+local ScreenGui = New("ScreenGui", {
     Name = "Turbo",
     ResetOnSpawn = false,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     IgnoreGuiInset = true,
-}, playerGui)
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, PlayerGui)
 
-local main = new("Frame", {
+local Main = New("Frame", {
     Name = "Main",
-    Size = UDim2.fromOffset(880, 580),
-    Position = UDim2.new(0.5, -440, 0.5, -290),
-    BackgroundColor3 = TurboTheme.Background,
+    Size = UDim2.fromOffset(920, 580),
+    Position = UDim2.new(0.5, -460, 0.5, -290),
+    BackgroundColor3 = Theme.Background,
     BorderSizePixel = 0,
-    Visible = true,
-}, screen)
-corner(main, 14)
-stroke(main, TurboTheme.Stroke, 1)
+    Active = true,
+    ClipsDescendants = false,
+}, ScreenGui)
+Corner(Main, 10)
+Stroke(Main, Theme.Stroke)
 
-local top = new("Frame", {
-    Size = UDim2.new(1, 0, 0, 58),
-    BackgroundColor3 = TurboTheme.Panel,
+-- Top
+local TopBar = New("Frame", {
+    Size = UDim2.new(1, 0, 0, 48),
+    BackgroundColor3 = Theme.Panel,
     BorderSizePixel = 0,
-}, main)
-corner(top, 14)
-
-local topClip = new("Frame", {
-    Size = UDim2.new(1, 0, 0, 20),
-    Position = UDim2.new(0, 0, 1, -20),
-    BackgroundColor3 = TurboTheme.Panel,
+    Active = true,
+}, Main)
+Corner(TopBar, 10)
+New("Frame", {
+    Size = UDim2.new(1, 0, 0, 16),
+    Position = UDim2.new(0, 0, 1, -16),
+    BackgroundColor3 = Theme.Panel,
     BorderSizePixel = 0,
-}, top)
-
-local title = label(top, "TURBO", 22, TurboTheme.Text, true)
-title.Position = UDim2.fromOffset(20, 6)
-title.Size = UDim2.fromOffset(200, 28)
-
-local subtitle = label(top, "Character Lock  ·  Control Center", 11, TurboTheme.SubText)
-subtitle.Position = UDim2.fromOffset(21, 32)
-subtitle.Size = UDim2.fromOffset(320, 18)
-
-local statusDot = new("Frame", {
-    Size = UDim2.fromOffset(8, 8),
-    Position = UDim2.new(1, -118, 0.5, -4),
-    BackgroundColor3 = TurboTheme.Green,
+}, TopBar)
+local TopLine = New("Frame", {
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 1, 0),
+    BackgroundColor3 = Theme.Accent,
     BorderSizePixel = 0,
-}, top)
-corner(statusDot, 4)
+}, TopBar)
 
-local status = label(top, "ACTIVE", 12, TurboTheme.Green, true)
-status.Size = UDim2.fromOffset(70, 24)
-status.Position = UDim2.new(1, -105, 0.5, -12)
-status.TextXAlignment = Enum.TextXAlignment.Left
+local Title = Label(TopBar, "photon", 18, Theme.Accent, true)
+Title.Position = UDim2.fromOffset(16, 0)
+Title.Size = UDim2.fromOffset(100, 48)
 
-local sidebar = new("Frame", {
-    Position = UDim2.fromOffset(12, 70),
-    Size = UDim2.fromOffset(180, 498),
-    BackgroundColor3 = TurboTheme.Panel,
+local SubTitle = Label(TopBar, "turbo v4  |  CharacterLock", 11, Theme.SubText)
+SubTitle.Position = UDim2.fromOffset(110, 0)
+SubTitle.Size = UDim2.fromOffset(220, 48)
+
+local StatusLbl = Label(TopBar, "● ACTIVE", 11, Theme.Green, true)
+StatusLbl.Position = UDim2.new(1, -120, 0, 0)
+StatusLbl.Size = UDim2.fromOffset(105, 48)
+StatusLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+-- Sidebar
+local Sidebar = New("Frame", {
+    Size = UDim2.fromOffset(140, 532),
+    Position = UDim2.fromOffset(0, 48),
+    BackgroundColor3 = Theme.Panel,
     BorderSizePixel = 0,
-}, main)
-corner(sidebar, 12)
-stroke(sidebar, TurboTheme.Stroke, 1)
-padding(sidebar, 10)
+}, Main)
+New("Frame", {
+    Size = UDim2.fromOffset(1, 532),
+    Position = UDim2.new(1, -1, 0, 0),
+    BackgroundColor3 = Theme.Stroke,
+    BorderSizePixel = 0,
+}, Sidebar)
 
-local sideTitle = label(sidebar, "NAVIGATION", 10, TurboTheme.SubText, true)
-sideTitle.Size = UDim2.new(1, 0, 0, 22)
-
-local tabs = new("Frame", {
-    Position = UDim2.fromOffset(0, 28),
-    Size = UDim2.new(1, 0, 1, -38),
+local TabContainer = New("Frame", {
+    Size = UDim2.new(1, -16, 1, -20),
+    Position = UDim2.fromOffset(8, 12),
     BackgroundTransparency = 1,
-}, sidebar)
+}, Sidebar)
+New("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, TabContainer)
 
-new("UIListLayout", {
-    Padding = UDim.new(0, 6),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, tabs)
+local Content = New("Frame", {
+    Size = UDim2.new(1, -140, 1, -48),
+    Position = UDim2.fromOffset(140, 48),
+    BackgroundTransparency = 1,
+    ClipsDescendants = false,
+}, Main)
 
-local content = new("Frame", {
-    Position = UDim2.fromOffset(202, 70),
-    Size = UDim2.fromOffset(666, 498),
-    BackgroundColor3 = TurboTheme.Panel,
-    BorderSizePixel = 0,
-}, main)
-corner(content, 12)
-stroke(content, TurboTheme.Stroke, 1)
+local Pages = {}
+local TabButtons = {}
 
-local pageTitle = label(content, "CharacterLock", 17, TurboTheme.Text, true)
-pageTitle.Position = UDim2.fromOffset(18, 12)
-pageTitle.Size = UDim2.fromOffset(400, 26)
-
-local pageSub = label(content, "Targeting, rotation, prediction and lock behaviour.", 11, TurboTheme.SubText)
-pageSub.Position = UDim2.fromOffset(18, 36)
-pageSub.Size = UDim2.fromOffset(600, 18)
-
-local pages = {}
-local tabButtons = {}
-local currentPage
-
-local function makePage(name)
-    local p = new("ScrollingFrame", {
+local function CreatePage(name)
+    local page = New("ScrollingFrame", {
         Name = name,
-        Position = UDim2.fromOffset(12, 62),
-        Size = UDim2.new(1, -24, 1, -74),
+        Size = UDim2.new(1, -16, 1, -16),
+        Position = UDim2.fromOffset(8, 8),
         BackgroundTransparency = 1,
-        BorderSizePixel = 0,
         ScrollBarThickness = 3,
-        ScrollBarImageColor3 = TurboTheme.Accent,
+        ScrollBarImageColor3 = Theme.Accent,
         CanvasSize = UDim2.new(0, 0, 0, 0),
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        ScrollingDirection = Enum.ScrollingDirection.Y,
-    }, content)
-    padding(p, 2, 6, 2, 8)
-    new("UIListLayout", {
-        Padding = UDim.new(0, 7),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, p)
-    pages[name] = p
-    return p
-end
-
-local pageLock = makePage("CharacterLock")
-local pageRotate = makePage("Rotate Method")
-local pageAim = makePage("Aim Parts")
-local pageWhite = makePage("Whitelist")
-local pageSettings = makePage("Settings")
-
-local function selectPage(name)
-    currentPage = name
-    for n, p in pairs(pages) do
-        p.Visible = n == name
-    end
-    for n, b in pairs(tabButtons) do
-        local isActive = n == name
-        b.BackgroundColor3 = isActive and TurboTheme.Accent or TurboTheme.Panel2
-        b.TextColor3 = isActive and Color3.new(1, 1, 1) or TurboTheme.SubText
-    end
-    pageTitle.Text = name
-    if name == "CharacterLock" then
-        pageSub.Text = "Targeting, prediction, aim and validation."
-    elseif name == "Rotate Method" then
-        pageSub.Text = "Rotation method and all its tuning parameters."
-    elseif name == "Aim Parts" then
-        pageSub.Text = "Custom aim part and offset per lock source (Block, Skill, M1)."
-    elseif name == "Whitelist" then
-        pageSub.Text = "Ignore selected players when locking targets."
-    else
-        pageSub.Text = "Hotkeys, timing, priorities and menu appearance."
-    end
-end
-
-local function makeTab(name, icon, order)
-    local b = new("TextButton", {
-        Name = name,
-        Size = UDim2.new(1, 0, 0, 40),
-        BackgroundColor3 = TurboTheme.Panel2,
+        Visible = false,
         BorderSizePixel = 0,
-        Text = "  " .. icon .. "   " .. name,
-        TextColor3 = TurboTheme.SubText,
-        TextSize = 13,
+        ClipsDescendants = false,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+    }, Content)
+    -- two columns via grid
+    New("UIGridLayout", {
+        CellPadding = UDim2.fromOffset(10, 10),
+        CellSize = UDim2.new(0.5, -5, 0, 0),
+        FillDirectionMaxCells = 2,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, page)
+    -- fix: use list of cards with automatic size instead of fixed grid height
+    page:FindFirstChildOfClass("UIGridLayout"):Destroy()
+    local row = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        ClipsDescendants = false,
+    }, page)
+    local left = New("Frame", {
+        Name = "L",
+        Size = UDim2.new(0.5, -5, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        ClipsDescendants = false,
+    }, row)
+    New("UIListLayout", {Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder}, left)
+    local right = New("Frame", {
+        Name = "R",
+        Size = UDim2.new(0.5, -5, 0, 0),
+        Position = UDim2.new(0.5, 5, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        ClipsDescendants = false,
+    }, row)
+    New("UIListLayout", {Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder}, right)
+    Pages[name] = {page = page, left = left, right = right}
+    return Pages[name]
+end
+
+local function SelectTab(name)
+    for n, p in pairs(Pages) do
+        p.page.Visible = (n == name)
+    end
+    for n, btn in pairs(TabButtons) do
+        local on = (n == name)
+        btn.BackgroundTransparency = on and 0 or 1
+        btn.BackgroundColor3 = Theme.Element
+        local ind = btn:FindFirstChild("Indicator")
+        if ind then ind.Visible = on end
+        for _, c in ipairs(btn:GetChildren()) do
+            if c:IsA("TextLabel") then
+                if c.Name == "Icon" then
+                    c.TextColor3 = on and Theme.Accent or Theme.SubText
+                else
+                    c.TextColor3 = on and Theme.Text or Theme.SubText
+                end
+            end
+        end
+    end
+end
+
+local function CreateTab(name, icon, order)
+    local btn = New("TextButton", {
+        Size = UDim2.new(1, 0, 0, 36),
+        BackgroundColor3 = Theme.Element,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+        LayoutOrder = order,
+        Active = true,
+    }, TabContainer)
+    Corner(btn, 6)
+    local ind = New("Frame", {
+        Name = "Indicator",
+        Size = UDim2.fromOffset(3, 18),
+        Position = UDim2.new(0, 0, 0.5, -9),
+        BackgroundColor3 = Theme.Accent,
+        BorderSizePixel = 0,
+        Visible = false,
+    }, btn)
+    Corner(ind, 2)
+    local ic = Label(btn, icon, 14, Theme.SubText, true)
+    ic.Name = "Icon"
+    ic.Size = UDim2.fromOffset(24, 36)
+    ic.Position = UDim2.fromOffset(8, 0)
+    ic.TextXAlignment = Enum.TextXAlignment.Center
+    local tx = Label(btn, name, 12, Theme.SubText, true)
+    tx.Position = UDim2.fromOffset(34, 0)
+    tx.Size = UDim2.new(1, -40, 1, 0)
+    btn.Activated:Connect(function()
+        SelectTab(name)
+    end)
+    TabButtons[name] = btn
+end
+
+CreateTab("CharacterLock", "●", 1)
+CreateTab("Whitelist", "◇", 2)
+CreateTab("Settings", "⚙", 3)
+CreateTab("Config", "◆", 4)
+
+local pageCL = CreatePage("CharacterLock")
+local pageWL = CreatePage("Whitelist")
+local pageST = CreatePage("Settings")
+local pageCF = CreatePage("Config")
+
+-- Card
+local function Card(parent, title)
+    local frame = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundColor3 = Theme.Panel,
+        BorderSizePixel = 0,
+        ClipsDescendants = false,
+    }, parent)
+    Corner(frame, 8)
+    Stroke(frame, Theme.Stroke)
+    local header = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 34),
+        BackgroundTransparency = 1,
+    }, frame)
+    local t = Label(header, title, 12, Theme.Text, true)
+    t.Position = UDim2.fromOffset(12, 0)
+    t.Size = UDim2.new(1, -24, 1, 0)
+    New("Frame", {
+        Size = UDim2.new(1, -24, 0, 1),
+        Position = UDim2.fromOffset(12, 33),
+        BackgroundColor3 = Theme.Accent,
+        BorderSizePixel = 0,
+    }, header)
+    local body = New("Frame", {
+        Size = UDim2.new(1, -20, 0, 0),
+        Position = UDim2.fromOffset(10, 40),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        ClipsDescendants = false,
+    }, frame)
+    New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, body)
+    New("UIPadding", {PaddingBottom = UDim.new(0, 10)}, body)
+    return body
+end
+
+-- Toggle (switch style)
+local function Toggle(parent, text, getter, setter)
+    local row = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 28),
+        BackgroundTransparency = 1,
+    }, parent)
+    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -50, 1, 0)
+
+    local btn = New("TextButton", {
+        Size = UDim2.fromOffset(38, 20),
+        Position = UDim2.new(1, -38, 0.5, -10),
+        BackgroundColor3 = Theme.Element,
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+    }, row)
+    Corner(btn, 10)
+    local circle = New("Frame", {
+        Size = UDim2.fromOffset(14, 14),
+        Position = UDim2.fromOffset(3, 3),
+        BackgroundColor3 = Theme.SubText,
+        BorderSizePixel = 0,
+    }, btn)
+    Corner(circle, 7)
+
+    local function update()
+        local on = getter()
+        if on then
+            Tween(btn, {BackgroundColor3 = Theme.Accent})
+            Tween(circle, {Position = UDim2.new(1, -17, 0, 3), BackgroundColor3 = Color3.new(1,1,1)})
+        else
+            Tween(btn, {BackgroundColor3 = Theme.Element})
+            Tween(circle, {Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.SubText})
+        end
+    end
+    update()
+    btn.Activated:Connect(function()
+        setter(not getter())
+        update()
+    end)
+    return {Refresh = update}
+end
+
+-- Slider
+local function Slider(parent, text, min, max, decimals, getter, setter)
+    decimals = decimals or 1
+    local row = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 46),
+        BackgroundTransparency = 1,
+    }, parent)
+    local title = Label(row, text, 12, Theme.Text)
+    title.Size = UDim2.new(1, -60, 0, 18)
+
+    local valueBox = New("TextBox", {
+        Size = UDim2.fromOffset(54, 18),
+        Position = UDim2.new(1, -54, 0, 0),
+        BackgroundColor3 = Theme.Element,
+        TextColor3 = Theme.Text,
+        Text = "",
+        TextSize = 11,
+        Font = Enum.Font.GothamMedium,
+        ClearTextOnFocus = false,
+        BorderSizePixel = 0,
+    }, row)
+    Corner(valueBox, 4)
+
+    local bar = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 5),
+        Position = UDim2.fromOffset(0, 28),
+        BackgroundColor3 = Theme.Element,
+        BorderSizePixel = 0,
+    }, row)
+    Corner(bar, 3)
+    local fill = New("Frame", {
+        Size = UDim2.new(0, 0, 1, 0),
+        BackgroundColor3 = Theme.Accent,
+        BorderSizePixel = 0,
+    }, bar)
+    Corner(fill, 3)
+    local knob = New("Frame", {
+        Size = UDim2.fromOffset(10, 10),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        BackgroundColor3 = Theme.Text,
+        BorderSizePixel = 0,
+        ZIndex = 2,
+    }, bar)
+    Corner(knob, 5)
+
+    local function fmt(v)
+        if decimals == 0 then return tostring(math.floor(v + 0.5)) end
+        local m = 10 ^ decimals
+        return string.format("%." .. decimals .. "f", math.floor(v * m + 0.5) / m)
+    end
+
+    local function setVisual(v, fire)
+        v = math.clamp(v, min, max)
+        if decimals == 0 then v = math.floor(v + 0.5)
+        else
+            local m = 10 ^ decimals
+            v = math.floor(v * m + 0.5) / m
+        end
+        local a = (max == min) and 0 or (v - min) / (max - min)
+        fill.Size = UDim2.new(a, 0, 1, 0)
+        knob.Position = UDim2.new(a, 0, 0.5, 0)
+        valueBox.Text = fmt(v)
+        if fire then setter(v) end
+    end
+    setVisual(getter(), false)
+
+    local dragging = false
+    local function fromMouse()
+        local mx = UserInputService:GetMouseLocation().X
+        local left = bar.AbsolutePosition.X
+        local w = math.max(bar.AbsoluteSize.X, 1)
+        local a = math.clamp((mx - left) / w, 0, 1)
+        setVisual(min + (max - min) * a, true)
+    end
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            fromMouse()
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            fromMouse()
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    valueBox.FocusLost:Connect(function()
+        local n = tonumber(valueBox.Text)
+        if n then setVisual(n, true) else setVisual(getter(), false) end
+    end)
+    return {Set = function(v) setVisual(v, true) end, Refresh = function() setVisual(getter(), false) end}
+end
+
+-- Dropdown (single open, high ZIndex, no clip)
+local OpenDropdown = nil
+
+local function CloseDropdown()
+    if OpenDropdown then
+        OpenDropdown.Visible = false
+        OpenDropdown = nil
+    end
+end
+
+local function Dropdown(parent, text, options, getter, setter)
+    local row = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 48),
+        BackgroundTransparency = 1,
+        ZIndex = 20,
+        ClipsDescendants = false,
+    }, parent)
+    local title = Label(row, text, 12, Theme.Text)
+    title.Size = UDim2.new(1, 0, 0, 16)
+
+    local btn = New("TextButton", {
+        Size = UDim2.new(1, 0, 0, 28),
+        Position = UDim2.fromOffset(0, 18),
+        BackgroundColor3 = Theme.Element,
+        Text = "  " .. tostring(getter()),
+        TextColor3 = Theme.Text,
+        TextSize = 11,
         Font = Enum.Font.GothamMedium,
         TextXAlignment = Enum.TextXAlignment.Left,
-        LayoutOrder = order,
         AutoButtonColor = false,
-    }, tabs)
-    corner(b, 8)
-    turboConnect(b.MouseButton1Click, function()
-        selectPage(name)
-    end)
-    tabButtons[name] = b
-end
-
-makeTab("CharacterLock", "◆", 1)
-makeTab("Rotate Method", "↻", 2)
-makeTab("Aim Parts", "◈", 3)
-makeTab("Whitelist", "◇", 4)
-makeTab("Settings", "⚙", 5)
-
-local function section(parent, name, desc)
-    local f = new("Frame", {
-        Size = UDim2.new(1, -4, 0, 40),
-        BackgroundColor3 = TurboTheme.Panel3,
         BorderSizePixel = 0,
-        LayoutOrder = 0,
-    }, parent)
-    corner(f, 8)
-    local t = label(f, name, 12, TurboTheme.Accent2, true)
-    t.Position = UDim2.fromOffset(12, 2)
-    t.Size = UDim2.new(1, -24, 0, 18)
-    local d = label(f, desc or "", 10, TurboTheme.SubText)
-    d.Position = UDim2.fromOffset(12, 20)
-    d.Size = UDim2.new(1, -24, 0, 16)
-    return f
-end
-
-local function toggle(parent, text, getter, setter)
-    local row = new("Frame", {
-        Size = UDim2.new(1, -4, 0, 40),
-        BackgroundColor3 = TurboTheme.Panel2,
-        BorderSizePixel = 0,
-    }, parent)
-    corner(row, 8)
-
-    local t = label(row, text, 12)
-    t.Position = UDim2.fromOffset(12, 0)
-    t.Size = UDim2.new(1, -90, 1, 0)
-
-    local b = new("TextButton", {
-        Size = UDim2.fromOffset(58, 24),
-        Position = UDim2.new(1, -70, 0.5, -12),
-        BackgroundColor3 = TurboTheme.Red,
-        BorderSizePixel = 0,
-        Text = "OFF",
-        TextColor3 = Color3.new(1, 1, 1),
-        TextSize = 10,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-    }, row)
-    corner(b, 6)
-
-    local function refresh()
-        local on = getter()
-        b.Text = on and "ON" or "OFF"
-        b.BackgroundColor3 = on and TurboTheme.Green or TurboTheme.Red
-    end
-    refresh()
-
-    turboConnect(b.MouseButton1Click, function()
-        setter(not getter())
-        refresh()
-    end)
-    return row, refresh
-end
-
-local function numberBox(parent, text, getter, setter, min, max, decimals)
-    -- min/max/decimals are now IGNORED on purpose: users can freely type
-    -- any number, including decimals like 1.4, 5.4, negative values, etc.
-    -- Parameters kept for call-site compatibility but no longer clamp/round.
-    local row = new("Frame", {
-        Size = UDim2.new(1, -4, 0, 42),
-        BackgroundColor3 = TurboTheme.Panel2,
-        BorderSizePixel = 0,
-    }, parent)
-    corner(row, 8)
-
-    local t = label(row, text, 12)
-    t.Position = UDim2.fromOffset(12, 0)
-    t.Size = UDim2.new(0.55, 0, 1, 0)
-
-    local box = new("TextBox", {
-        Size = UDim2.fromOffset(120, 26),
-        Position = UDim2.new(1, -132, 0.5, -13),
-        BackgroundColor3 = TurboTheme.Background,
-        BorderSizePixel = 0,
-        Text = tostring(getter()),
-        TextColor3 = TurboTheme.Text,
-        PlaceholderColor3 = TurboTheme.SubText,
-        TextSize = 12,
-        Font = Enum.Font.Gotham,
-        ClearTextOnFocus = false,
-        TextXAlignment = Enum.TextXAlignment.Center,
-    }, row)
-    corner(box, 6)
-    stroke(box, TurboTheme.Stroke, 1)
-
-    turboConnect(box.FocusLost, function()
-        local v = tonumber(box.Text)
-        if v then
-            setter(v)
-        end
-        box.Text = tostring(getter())
-    end)
-    return row
-end
-
-local allDropdownLists = {}
-
-local function dropdown(parent, text, getter, setter, options)
-    local row = new("Frame", {
-        Size = UDim2.new(1, -4, 0, 42),
-        BackgroundColor3 = TurboTheme.Panel2,
-        BorderSizePixel = 0,
-        ZIndex = 5,
-    }, parent)
-    corner(row, 8)
-
-    local t = label(row, text, 12)
-    t.Position = UDim2.fromOffset(12, 0)
-    t.Size = UDim2.new(0.4, 0, 1, 0)
-
-    local b = new("TextButton", {
-        Size = UDim2.fromOffset(200, 26),
-        Position = UDim2.new(1, -212, 0.5, -13),
-        BackgroundColor3 = TurboTheme.Background,
-        BorderSizePixel = 0,
-        Text = tostring(getter()),
-        TextColor3 = TurboTheme.Text,
-        TextSize = 11,
-        Font = Enum.Font.Gotham,
-        AutoButtonColor = false,
-        ZIndex = 10,
-    }, row)
-    corner(b, 6)
-    stroke(b, TurboTheme.Stroke, 1)
-
-    -- Lista é um Frame simples (sem ScrollingFrame) para garantir que TODOS os itens,
-    -- incluindo os últimos, sejam sempre clicáveis. Nenhuma das listas usadas neste menu
-    -- é longa o suficiente para realmente precisar de scroll (máx. ~12 itens = 336px),
-    -- então evitamos qualquer interferência de ScrollBar/Canvas com os cliques.
-    local listHeightTotal = #options * 28
-    local list = new("Frame", {
-        Name = "DropdownOverlay",
-        Visible = false,
-        Size = UDim2.fromOffset(200, listHeightTotal),
-        BackgroundColor3 = TurboTheme.Background,
-        BorderSizePixel = 0,
-        ZIndex = 500,
+        ZIndex = 21,
         ClipsDescendants = false,
-    }, screen)
-    corner(list, 6)
-    stroke(list, TurboTheme.Stroke, 1)
-    new("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, list)
-    table.insert(allDropdownLists, list)
+    }, row)
+    Corner(btn, 5)
 
-    local function repositionList()
-        local absPos = b.AbsolutePosition
-        local absSize = b.AbsoluteSize
-        local listHeight = listHeightTotal
-        list.Size = UDim2.fromOffset(absSize.X, listHeight)
-        local screenHeight = (camera and camera.ViewportSize.Y) or 720
-        local y = absPos.Y + absSize.Y + 4
-        if y + listHeight > screenHeight then
-            y = absPos.Y - listHeight - 4
-        end
-        y = math.clamp(y, 0, math.max(0, screenHeight - listHeight))
-        list.Position = UDim2.fromOffset(absPos.X, y)
-    end
+    local listH = math.min(#options * 26, 156)
+    local list = New("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 0, listH),
+        Position = UDim2.new(0, 0, 1, 4),
+        BackgroundColor3 = Theme.Panel2,
+        BorderSizePixel = 0,
+        Visible = false,
+        ZIndex = 200,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = Theme.Accent,
+        CanvasSize = UDim2.new(0, 0, 0, #options * 26),
+        ClipsDescendants = true,
+    }, btn)
+    Corner(list, 5)
+    Stroke(list, Theme.Stroke)
+    New("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, list)
 
-    for i, option in ipairs(options) do
-        local opt = new("TextButton", {
-            Size = UDim2.new(1, 0, 0, 28),
+    for i, opt in ipairs(options) do
+        local o = New("TextButton", {
+            Size = UDim2.new(1, 0, 0, 26),
             BackgroundTransparency = 1,
-            Text = tostring(option),
-            TextColor3 = TurboTheme.Text,
+            Text = "  " .. tostring(opt),
+            TextColor3 = Theme.Text,
             TextSize = 11,
             Font = Enum.Font.Gotham,
+            TextXAlignment = Enum.TextXAlignment.Left,
             AutoButtonColor = false,
-            ZIndex = 501,
+            BorderSizePixel = 0,
             LayoutOrder = i,
+            ZIndex = 201,
         }, list)
-        turboConnect(opt.MouseButton1Click, function()
-            setter(option)
-            b.Text = tostring(getter())
-            list.Visible = false
+        o.Activated:Connect(function()
+            setter(opt)
+            btn.Text = "  " .. tostring(getter())
+            CloseDropdown()
         end)
-        turboConnect(opt.MouseEnter, function()
-            opt.BackgroundTransparency = 0.85
-            opt.BackgroundColor3 = TurboTheme.Accent
+        o.MouseEnter:Connect(function()
+            o.BackgroundTransparency = 0
+            o.BackgroundColor3 = Theme.Element
         end)
-        turboConnect(opt.MouseLeave, function()
-            opt.BackgroundTransparency = 1
+        o.MouseLeave:Connect(function()
+            o.BackgroundTransparency = 1
         end)
     end
 
-    turboConnect(b.MouseButton1Click, function()
-        if not list.Visible then
-            repositionList()
-        end
-        list.Visible = not list.Visible
-    end)
-
-    -- Fecha o dropdown se clicar fora dele. Usa InputEnded (não InputBegan) para que o
-    -- clique em uma opção seja processado e resolvido ANTES de decidirmos se devemos
-    -- fechar a lista, garantindo que todos os itens (inclusive os últimos) respondam ao clique.
-    turboConnect(UserInputService.InputEnded, function(input)
-        if not list.Visible then return end
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
-        local mousePos = UserInputService:GetMouseLocation()
-        local lp, ls = list.AbsolutePosition, list.AbsoluteSize
-        local bp, bs = b.AbsolutePosition, b.AbsoluteSize
-        local overList = mousePos.X >= lp.X and mousePos.X <= lp.X + ls.X and mousePos.Y >= lp.Y and mousePos.Y <= lp.Y + ls.Y
-        local overButton = mousePos.X >= bp.X and mousePos.X <= bp.X + bs.X and mousePos.Y >= bp.Y and mousePos.Y <= bp.Y + bs.Y
-        if not overList and not overButton then
-            list.Visible = false
+    btn.Activated:Connect(function()
+        if list.Visible then
+            CloseDropdown()
+        else
+            CloseDropdown()
+            list.Visible = true
+            OpenDropdown = list
         end
     end)
 
-    return row
+    return {
+        Refresh = function()
+            btn.Text = "  " .. tostring(getter())
+        end
+    }
 end
 
-local function keybind(parent, text, getter, setter)
-    local row = new("Frame", {
-        Size = UDim2.new(1, -4, 0, 42),
-        BackgroundColor3 = TurboTheme.Panel2,
-        BorderSizePixel = 0,
+-- Keybind
+local BindingBtn = nil
+local function KeyName(k)
+    if not k or k == Enum.KeyCode.Unknown then return "None" end
+    return k.Name
+end
+
+local function Bind(parent, text, getter, setter)
+    local row = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 32),
+        BackgroundTransparency = 1,
+        ZIndex = 30,
     }, parent)
-    corner(row, 8)
+    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -100, 1, 0)
 
-    local t = label(row, text, 12)
-    t.Position = UDim2.fromOffset(12, 0)
-    t.Size = UDim2.new(0.5, 0, 1, 0)
-
-    local b = new("TextButton", {
-        Size = UDim2.fromOffset(120, 26),
-        Position = UDim2.new(1, -132, 0.5, -13),
-        BackgroundColor3 = TurboTheme.Background,
-        BorderSizePixel = 0,
-        Text = getter().Name,
-        TextColor3 = TurboTheme.Text,
+    local btn = New("TextButton", {
+        Size = UDim2.fromOffset(95, 26),
+        Position = UDim2.new(1, -95, 0.5, -13),
+        BackgroundColor3 = Theme.Element,
+        Text = KeyName(getter()),
+        TextColor3 = Theme.Text,
         TextSize = 11,
-        Font = Enum.Font.Gotham,
+        Font = Enum.Font.GothamMedium,
         AutoButtonColor = false,
+        BorderSizePixel = 0,
+        ZIndex = 31,
     }, row)
-    corner(b, 6)
-    stroke(b, TurboTheme.Stroke, 1)
+    Corner(btn, 5)
 
-    local listening = false
-    turboConnect(b.MouseButton1Click, function()
-        listening = true
-        b.Text = "..."
-        b.TextColor3 = TurboTheme.Accent
-    end)
-
-    turboConnect(UserInputService.InputBegan, function(input)
-        if listening and input.UserInputType == Enum.UserInputType.Keyboard then
-            listening = false
-            setter(input.KeyCode)
-            b.Text = input.KeyCode.Name
-            b.TextColor3 = TurboTheme.Text
+    btn.Activated:Connect(function()
+        if BindingBtn == btn then
+            BindingBtn = nil
+            btn.Text = KeyName(getter())
+            btn.TextColor3 = Theme.Text
+        else
+            BindingBtn = btn
+            btn.Text = "..."
+            btn.TextColor3 = Theme.Accent
         end
     end)
-    return row
+
+    return {
+        Refresh = function()
+            if BindingBtn ~= btn then
+                btn.Text = KeyName(getter())
+                btn.TextColor3 = Theme.Text
+            end
+        end,
+        _btn = btn,
+        _getter = getter,
+        _setter = setter,
+    }
 end
 
--- ===================== CHARACTER LOCK PAGE =====================
-section(pageLock, "MASTER", "Enable or disable the entire lock system.")
-local masterToggle, masterToggleRefresh
-masterToggle, masterToggleRefresh = toggle(pageLock, "ENABLE LOCK",
-    function() return lockEnabled end,
-    function(v)
-        setLockEnabled(v)
-    end)
+-- Track binds for input handler
+local AllBinds = {}
 
-onLockEnabledChanged = function(v)
-    if masterToggleRefresh then masterToggleRefresh() end
-    if status then
-        status.Text = v and "ACTIVE" or "OFF"
-        status.TextColor3 = v and TurboTheme.Green or TurboTheme.Red
-        statusDot.BackgroundColor3 = v and TurboTheme.Green or TurboTheme.Red
-    end
-end
+-- =====================================================
+-- CHARACTER LOCK
+-- =====================================================
+local cMethods = Card(pageCL.left, "Methods")
+Dropdown(cMethods, "Rotate Method",
+    {"CFrame", "Align", "Align2", "BodyGyro", "AngularVel", "Torque", "Motor6D", "Assembly"},
+    function() return Config.RotateMode end,
+    function(v) Config.RotateMode = v end)
 
-section(pageLock, "DEADZONE", "Angle tolerance before the character turns.")
-numberBox(pageLock, "Deadzone (degrees)",
+local cDead = Card(pageCL.left, "Deadzone")
+Slider(cDead, "Deadzone (deg)", 0, 180, 0,
     function() return Config.TurnDeadzoneDegrees end,
-    function(v) Config.TurnDeadzoneDegrees = v end, 0, 180, 1)
-toggle(pageLock, "Zero Deadzone While Holding",
+    function(v) Config.TurnDeadzoneDegrees = v end)
+Toggle(cDead, "Zero While Holding",
     function() return Config.ZeroDeadzoneWhenHolding end,
     function(v) Config.ZeroDeadzoneWhenHolding = v end)
 
-section(pageLock, "PREDICTION", "Anticipate target movement.")
-toggle(pageLock, "Enable Prediction",
+local cPred = Card(pageCL.left, "Prediction")
+Toggle(cPred, "Enabled",
     function() return Config.UsePrediction end,
     function(v) Config.UsePrediction = v end)
-numberBox(pageLock, "Prediction Strength",
+Slider(cPred, "Strength", 0, 1, 3,
     function() return Config.PredictionStrength end,
-    function(v) Config.PredictionStrength = v end, 0, 2, 3)
-numberBox(pageLock, "Prediction Max Speed",
+    function(v) Config.PredictionStrength = v end)
+Slider(cPred, "Max Speed", 1, 300, 0,
     function() return Config.PredictionMaxSpeed end,
-    function(v) Config.PredictionMaxSpeed = v end, 1, 1000, 1)
-numberBox(pageLock, "History Smoothing",
+    function(v) Config.PredictionMaxSpeed = v end)
+Slider(cPred, "History Smooth", 1, 60, 0,
     function() return Config.PredictionHistorySmoothing end,
-    function(v) Config.PredictionHistorySmoothing = v end, 1, 60, 0)
+    function(v) Config.PredictionHistorySmoothing = v end)
 
-section(pageLock, "AIM PART & OFFSETS", "Where the lock aims on the target.")
-dropdown(pageLock, "Aim Part (Default)",
+local cAim = Card(pageCL.left, "Aim Part")
+Dropdown(cAim, "Aim Part",
+    {"Root", "Head", "AboveHead", "Torso", "Chest", "Body", "Front", "Back", "Left", "Right", "LeftArm", "RightArm"},
     function() return Config.AimPointBySource.default end,
     function(v)
         Config.AimPointBySource.default = v
         Config.AimPointBySource.sticky = v
         Config.AimPointBySource.priority = v
-    end,
-    {"Root", "Head", "AboveHead", "Torso", "Chest", "Body", "Front", "Back", "Left", "Right", "LeftArm", "RightArm"}
-)
-numberBox(pageLock, "Aim Offset (Default)",
+    end)
+Slider(cAim, "Aim Offset", -10, 10, 2,
     function() return Config.AimOffsetBySource.default end,
     function(v)
         Config.AimOffsetBySource.default = v
         Config.AimOffsetBySource.sticky = v
         Config.AimOffsetBySource.priority = v
-    end, -20, 20, 2)
-numberBox(pageLock, "Above Head Height",
+    end)
+Slider(cAim, "Above Head Height", 0, 5, 2,
     function() return Config.AboveHeadHeight end,
-    function(v) Config.AboveHeadHeight = v end, 0, 5, 2)
+    function(v) Config.AboveHeadHeight = v end)
 
-section(pageLock, "SMOOTH", "Smoothing for aim and rotation.")
-numberBox(pageLock, "Aim Smooth",
+local cSmooth = Card(pageCL.right, "Smooth")
+Slider(cSmooth, "Aim Smooth", 0, 0.99, 2,
     function() return Config.AimSmooth end,
-    function(v) Config.AimSmooth = v end, 0, 0.99, 2)
-toggle(pageLock, "Smooth Turn",
+    function(v) Config.AimSmooth = v end)
+Toggle(cSmooth, "Smooth Turn",
     function() return Config.UseSmoothTurn end,
     function(v) Config.UseSmoothTurn = v end)
-numberBox(pageLock, "Smooth Turn Time",
+Slider(cSmooth, "Turn Time", 0.01, 1, 3,
     function() return Config.Smoothness end,
-    function(v) Config.Smoothness = v end, 0.01, 2, 3)
+    function(v) Config.Smoothness = v end)
 
-section(pageLock, "DELAY", "Behind teleport and hold delays.")
-numberBox(pageLock, "Behind Hold Delay",
+local cDelay = Card(pageCL.right, "Delay / Behind")
+Slider(cDelay, "Behind Hold Delay", 0, 2, 2,
     function() return Config.BehindHoldDelay end,
-    function(v) Config.BehindHoldDelay = v end, 0, 3, 3)
-numberBox(pageLock, "Behind Distance",
+    function(v) Config.BehindHoldDelay = v end)
+Slider(cDelay, "Behind Distance", 0, 20, 1,
     function() return Config.BehindDistance end,
-    function(v) Config.BehindDistance = v end, 0, 50, 2)
-numberBox(pageLock, "Behind Smooth Time",
+    function(v) Config.BehindDistance = v end)
+Slider(cDelay, "Behind Smooth", 0, 0.5, 3,
     function() return Config.BehindSmoothTime end,
-    function(v) Config.BehindSmoothTime = v end, 0, 1, 3)
-toggle(pageLock, "Enable Teleport Behind",
+    function(v) Config.BehindSmoothTime = v end)
+Toggle(cDelay, "Enable Teleport",
     function() return Config.EnableTeleport end,
     function(v) Config.EnableTeleport = v end)
 
-section(pageLock, "RETARGETS", "Retarget to closest target while locking.")
-toggle(pageLock, "Block Retarget",
+local cRet = Card(pageCL.right, "Retargets")
+Toggle(cRet, "Block Retarget",
     function() return Config.BlockRetargetClosest end,
     function(v) Config.BlockRetargetClosest = v end)
-toggle(pageLock, "Skill Retarget",
+Toggle(cRet, "Skill Retarget",
     function() return Config.SkillRetargetClosest end,
     function(v) Config.SkillRetargetClosest = v end)
-toggle(pageLock, "Mouse Retarget",
+Toggle(cRet, "Mouse Retarget",
     function() return Config.MouseRetargetClosest end,
     function(v) Config.MouseRetargetClosest = v end)
-numberBox(pageLock, "Scan Interval (0 = every frame)",
+Slider(cRet, "Scan Interval", 0, 1, 3,
     function() return Config.UltraScanInterval end,
-    function(v) Config.UltraScanInterval = v end, 0, 2, 3)
+    function(v) Config.UltraScanInterval = v end)
 
-section(pageLock, "DISTANCE", "Min and max lock range.")
-numberBox(pageLock, "Min Lock Distance",
+local cDist = Card(pageCL.right, "Distance")
+Slider(cDist, "Min Lock Distance", 0, 100, 0,
     function() return Config.MinLockDistance end,
-    function(v) Config.MinLockDistance = v end, 0, 10000, 1)
-numberBox(pageLock, "Max Lock Distance",
+    function(v) Config.MinLockDistance = v end)
+Slider(cDist, "Max Lock Distance", 10, 1000, 0,
     function() return Config.MaxLockDistance end,
-    function(v) Config.MaxLockDistance = v end, 1, 10000, 1)
+    function(v) Config.MaxLockDistance = v end)
 
-section(pageLock, "VALIDATION & SNAP", "Safety checks and instant behind snap.")
-toggle(pageLock, "Strong Validation",
+local cVal = Card(pageCL.right, "Validation")
+Toggle(cVal, "Strong Validation",
     function() return Config.StrongValidation end,
     function(v) Config.StrongValidation = v end)
-toggle(pageLock, "Instant Behind Snap",
+Toggle(cVal, "Instant Behind Snap",
     function() return Config.InstantBehindSnap end,
     function(v) Config.InstantBehindSnap = v end)
-toggle(pageLock, "Ignore Active Counter",
+Toggle(cVal, "Ignore Active Counter",
     function() return Config.IgnoreActiveCounter end,
     function(v) Config.IgnoreActiveCounter = v end)
-numberBox(pageLock, "Grace Time After Stun",
-    function() return Config.GraceTimeAfterStun end,
-    function(v) Config.GraceTimeAfterStun = v end, 0, 2, 2)
 
--- ===================== ROTATE METHOD PAGE =====================
-section(pageRotate, "METHOD", "Rotation method used by the lock system.")
-dropdown(pageRotate, "Rotate Method",
-    function() return Config.RotateMode end,
-    function(v)
-        Config.RotateMode = v
-        setupRotateInstances(lockedTarget)
-    end,
-    {"CFrame", "Align", "Align2", "BodyGyro", "AngularVel", "Torque", "Motor6D", "Assembly"}
-)
-
-section(pageRotate, "SMOOTH TURN", "Smoothing applied to CFrame-based rotation.")
-toggle(pageRotate, "Smooth Turn",
-    function() return Config.UseSmoothTurn end,
-    function(v) Config.UseSmoothTurn = v end)
-numberBox(pageRotate, "Smooth Turn Time",
-    function() return Config.Smoothness end,
-    function(v) Config.Smoothness = v end, 0.01, 2, 3)
-
-section(pageRotate, "ALIGN / ALIGN2", "Tuning for AlignOrientation based modes.")
-numberBox(pageRotate, "Align Responsiveness",
-    function() return Config.AlignResponsiveness end,
-    function(v) Config.AlignResponsiveness = v end, 1, 20000, 0)
-numberBox(pageRotate, "Align Max Torque",
-    function() return Config.AlignMaxTorque end,
-    function(v) Config.AlignMaxTorque = v end, 1, 1e9, 0)
-toggle(pageRotate, "Align Rigidity",
-    function() return Config.AlignRigidity end,
-    function(v) Config.AlignRigidity = v end)
-
-section(pageRotate, "BODY GYRO", "Tuning for the BodyGyro rotation mode.")
-numberBox(pageRotate, "Gyro P",
-    function() return Config.GyroP end,
-    function(v) Config.GyroP = v end, 0, 200000, 0)
-numberBox(pageRotate, "Gyro D",
-    function() return Config.GyroD end,
-    function(v) Config.GyroD = v end, 0, 5000, 0)
-
-section(pageRotate, "ANGULAR VELOCITY", "Tuning for the AngularVel rotation mode.")
-numberBox(pageRotate, "AngVel Responsiveness",
-    function() return Config.AngVelResponsiveness end,
-    function(v) Config.AngVelResponsiveness = v end, 0, 200, 1)
-numberBox(pageRotate, "AngVel Max",
-    function() return Config.AngVelMax end,
-    function(v) Config.AngVelMax = v end, 0, 200, 1)
-numberBox(pageRotate, "AngVel Max Torque",
-    function() return Config.AngVelMaxTorque end,
-    function(v) Config.AngVelMaxTorque = v end, 1, 1e9, 0)
-
-section(pageRotate, "TORQUE", "Tuning for the Torque rotation mode.")
-numberBox(pageRotate, "Torque Gain",
-    function() return Config.TorqueGain end,
-    function(v) Config.TorqueGain = v end, 0, 1000000, 0)
-numberBox(pageRotate, "Torque Damping",
-    function() return Config.TorqueDamping end,
-    function(v) Config.TorqueDamping = v end, 0, 200000, 0)
-numberBox(pageRotate, "Torque Max",
-    function() return Config.TorqueMax end,
-    function(v) Config.TorqueMax = v end, 0, 5000000, 0)
-
-section(pageRotate, "MOTOR6D", "Tuning for the Motor6D rotation mode.")
-numberBox(pageRotate, "Motor6D Max Angle (deg)",
-    function() return math.floor(math.deg(Config.Motor6DMaxAngle) + 0.5) end,
-    function(v) Config.Motor6DMaxAngle = math.rad(v) end, 0, 180, 0)
-numberBox(pageRotate, "Humanoid Move Power",
-    function() return Config.HumanoidMovePower end,
-    function(v) Config.HumanoidMovePower = v end, 0, 10, 2)
-
--- ===================== AIM PARTS PAGE =====================
-local AIM_PART_OPTIONS = {"Root", "Head", "AboveHead", "Torso", "Chest", "Body", "Front", "Back", "Left", "Right", "LeftArm", "RightArm"}
-
--- Block uses whichever key is flagged as the "block" key (F by default, but
--- kept generic here so it can be rebound like any other key).
-local function isBlockKeyBound(key)
-    return key == Config.BlockKey
-end
-
-if Config.BlockKey == nil then
-    Config.BlockKey = Enum.KeyCode.F
-end
-
-local function aimSourceSection(sourceKey, displayName, desc, keyGetter, keySetter)
-    section(pageAim, displayName, desc)
-    if keyGetter and keySetter then
-        keybind(pageAim, displayName .. " Key",
-            keyGetter, keySetter)
-    end
-    dropdown(pageAim, displayName .. " Aim Part",
-        function() return Config.AimPointBySource[sourceKey] end,
-        function(v) Config.AimPointBySource[sourceKey] = v end,
-        AIM_PART_OPTIONS
-    )
-    numberBox(pageAim, displayName .. " Offset",
-        function() return Config.AimOffsetBySource[sourceKey] end,
-        function(v) Config.AimOffsetBySource[sourceKey] = v end)
-end
-
-aimSourceSection("block", "Block", "Aim part, offset and key used for Block.",
-    function() return Config.BlockKey end,
-    function(v) Config.BlockKey = v end)
-aimSourceSection("skill", "Skill", "Aim part and offset used for Skill lock keys (customize keys in Settings > Lock Keys).")
-aimSourceSection("mouse", "M1", "Aim part and offset used while holding Mouse Button 1.")
-aimSourceSection("q", "Behind", "Aim part, offset and key used for the Behind lock.",
-    function() return Config.BehindKey end,
-    function(v) Config.BehindKey = v end)
-section(pageAim, "Priority / Sticky", "Aim part, offset and keys used for Priority and Sticky lock.")
-keybind(pageAim, "Priority Key",
-    function() return Config.PriorityKey end,
-    function(v) Config.PriorityKey = v end)
-keybind(pageAim, "Sticky Key",
-    function() return Config.StickyLockKey end,
-    function(v) Config.StickyLockKey = v end)
-dropdown(pageAim, "Priority / Sticky Aim Part",
-    function() return Config.AimPointBySource.priority end,
-    function(v)
-        Config.AimPointBySource.priority = v
-        Config.AimPointBySource.sticky = v
-    end,
-    AIM_PART_OPTIONS
-)
-numberBox(pageAim, "Priority / Sticky Offset",
-    function() return Config.AimOffsetBySource.priority end,
-    function(v)
-        Config.AimOffsetBySource.priority = v
-        Config.AimOffsetBySource.sticky = v
-    end)
-
--- ===================== WHITELIST PAGE =====================
-section(pageWhite, "ALLY FILTER", "Ignore selected players when acquiring a target.")
-toggle(pageWhite, "Whitelist Allies (Enabled)",
+-- =====================================================
+-- WHITELIST
+-- =====================================================
+local cAlly = Card(pageWL.left, "Ally Filter")
+Toggle(cAlly, "Whitelist Allies",
     function() return Config.IgnoreAllies.Enabled end,
-    function(v)
-        Config.IgnoreAllies.Enabled = v
-        rebuildAllyCache()
-    end)
-dropdown(pageWhite, "Whitelist Mode",
+    function(v) Config.IgnoreAllies.Enabled = v; rebuildAllyCache() end)
+Dropdown(cAlly, "Mode",
+    {"UserId", "Name"},
     function() return Config.IgnoreAllies.UseUserId and "UserId" or "Name" end,
-    function(v)
-        Config.IgnoreAllies.UseUserId = (v == "UserId")
-        rebuildAllyCache()
-    end,
-    {"UserId", "Name"}
-)
+    function(v) Config.IgnoreAllies.UseUserId = (v == "UserId"); rebuildAllyCache() end)
 
-local playerList = new("Frame", {
-    Size = UDim2.new(1, -4, 0, 280),
-    BackgroundColor3 = TurboTheme.Panel2,
-    BorderSizePixel = 0,
-}, pageWhite)
-corner(playerList, 8)
-
-local plTitle = label(playerList, "Players in server  (click to toggle)", 12, TurboTheme.Text, true)
-plTitle.Position = UDim2.fromOffset(12, 8)
-plTitle.Size = UDim2.new(1, -24, 0, 22)
-
-local plScroll = new("ScrollingFrame", {
-    Position = UDim2.fromOffset(8, 34),
-    Size = UDim2.new(1, -16, 1, -42),
+local cPl = Card(pageWL.right, "Players in Server")
+local plScroll = New("ScrollingFrame", {
+    Size = UDim2.new(1, 0, 0, 300),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ScrollBarThickness = 3,
-    ScrollBarImageColor3 = TurboTheme.Accent,
+    ScrollBarImageColor3 = Theme.Accent,
     CanvasSize = UDim2.new(0, 0, 0, 0),
     AutomaticCanvasSize = Enum.AutomaticSize.Y,
-}, playerList)
-new("UIListLayout", {
-    Padding = UDim.new(0, 4),
-    SortOrder = Enum.SortOrder.Name,
-}, plScroll)
+}, cPl)
+New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.Name}, plScroll)
 
 local function isWhitelisted(plr)
     if Config.IgnoreAllies.UseUserId then
@@ -2126,9 +2076,9 @@ local function isWhitelisted(plr)
             if tonumber(id) == plr.UserId then return true end
         end
     else
-        local wanted = string.lower(plr.Name)
+        local w = string.lower(plr.Name)
         for _, name in ipairs(Config.IgnoreAllies.Names) do
-            if string.lower(tostring(name)) == wanted then return true end
+            if string.lower(tostring(name)) == w then return true end
         end
     end
     return false
@@ -2144,9 +2094,7 @@ local function setWhitelisted(plr, value)
     else
         local names = Config.IgnoreAllies.Names
         for i = #names, 1, -1 do
-            if string.lower(tostring(names[i])) == string.lower(plr.Name) then
-                table.remove(names, i)
-            end
+            if string.lower(tostring(names[i])) == string.lower(plr.Name) then table.remove(names, i) end
         end
         if value then table.insert(names, plr.Name) end
     end
@@ -2154,408 +2102,520 @@ local function setWhitelisted(plr, value)
 end
 
 local function rebuildPlayerList()
-    for _, child in ipairs(plScroll:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
+    for _, c in ipairs(plScroll:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
     end
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player then
             local on = isWhitelisted(plr)
-            local b = new("TextButton", {
-                Size = UDim2.new(1, -4, 0, 32),
-                BackgroundColor3 = on and Color3.fromRGB(40, 90, 60) or TurboTheme.Background,
+            local b = New("TextButton", {
+                Size = UDim2.new(1, -4, 0, 28),
+                BackgroundColor3 = on and Color3.fromRGB(40, 70, 50) or Theme.Element,
                 BorderSizePixel = 0,
                 Text = "  " .. plr.Name .. (on and "  ✓" or ""),
-                TextColor3 = TurboTheme.Text,
+                TextColor3 = Theme.Text,
                 TextSize = 12,
                 Font = Enum.Font.GothamMedium,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 AutoButtonColor = false,
             }, plScroll)
-            corner(b, 6)
-            turboConnect(b.MouseButton1Click, function()
+            Corner(b, 5)
+            b.Activated:Connect(function()
                 setWhitelisted(plr, not isWhitelisted(plr))
                 local now = isWhitelisted(plr)
-                b.BackgroundColor3 = now and Color3.fromRGB(40, 90, 60) or TurboTheme.Background
+                b.BackgroundColor3 = now and Color3.fromRGB(40, 70, 50) or Theme.Element
                 b.Text = "  " .. plr.Name .. (now and "  ✓" or "")
             end)
         end
     end
 end
-
 rebuildPlayerList()
-turboConnect(Players.PlayerAdded, rebuildPlayerList)
-turboConnect(Players.PlayerRemoving, rebuildPlayerList)
+Players.PlayerAdded:Connect(rebuildPlayerList)
+Players.PlayerRemoving:Connect(rebuildPlayerList)
 
-local clearWhite = new("TextButton", {
-    Size = UDim2.new(1, -4, 0, 36),
-    BackgroundColor3 = TurboTheme.Panel2,
+local clearBtn = New("TextButton", {
+    Size = UDim2.new(1, 0, 0, 28),
+    BackgroundColor3 = Theme.Element,
     BorderSizePixel = 0,
     Text = "Clear Whitelist",
-    TextColor3 = TurboTheme.Text,
+    TextColor3 = Theme.Text,
     TextSize = 12,
     Font = Enum.Font.GothamMedium,
     AutoButtonColor = false,
-}, pageWhite)
-corner(clearWhite, 8)
-turboConnect(clearWhite.MouseButton1Click, function()
+}, cPl)
+Corner(clearBtn, 5)
+clearBtn.Activated:Connect(function()
     table.clear(Config.IgnoreAllies.UserIds)
     table.clear(Config.IgnoreAllies.Names)
     rebuildAllyCache()
     rebuildPlayerList()
 end)
 
--- ===================== SETTINGS PAGE =====================
-section(pageSettings, "TARGET PRIORITY", "Prefer players, NPCs or pure closest.")
-local TARGET_PRIORITY_OPTIONS = {"Players", "NPC", "Closest"}
-dropdown(pageSettings, "Target Priority",
+-- =====================================================
+-- SETTINGS
+-- =====================================================
+local cPrio = Card(pageST.left, "Target Priority")
+Dropdown(cPrio, "Priority",
+    {"Players", "NPC", "Closest"},
     function() return Config.TargetPriority end,
-    function(v) Config.TargetPriority = v end,
-    TARGET_PRIORITY_OPTIONS
-)
+    function(v) Config.TargetPriority = v end)
 
-section(pageSettings, "HOTKEYS", "Change the keys used by the lock system.")
-keybind(pageSettings, "Enable/Disable Lock Key",
-    function() return Config.EnableLockKey end,
-    function(v) Config.EnableLockKey = v end)
-keybind(pageSettings, "Sticky Key",
-    function() return Config.StickyLockKey end,
-    function(v) Config.StickyLockKey = v end)
-keybind(pageSettings, "Behind Key (Q)",
-    function() return Config.BehindKey end,
-    function(v) Config.BehindKey = v end)
-keybind(pageSettings, "Priority Key",
-    function() return Config.PriorityKey end,
-    function(v) Config.PriorityKey = v end)
-keybind(pageSettings, "Open / Toggle Menu Key",
-    function() return Config.ToggleKey end,
-    function(v) Config.ToggleKey = v end)
+local cKeys = Card(pageST.left, "Hotkeys")
+local b1 = Bind(cKeys, "Menu Key", function() return Config.ToggleKey end, function(v) Config.ToggleKey = v end)
+local b2 = Bind(cKeys, "Enable Lock Key", function() return Config.EnableLockKey end, function(v) Config.EnableLockKey = v end)
+local b3 = Bind(cKeys, "Sticky Key", function() return Config.StickyLockKey end, function(v) Config.StickyLockKey = v end)
+local b4 = Bind(cKeys, "Behind Key", function() return Config.BehindKey end, function(v) Config.BehindKey = v end)
+local b5 = Bind(cKeys, "Priority Key", function() return Config.PriorityKey end, function(v) Config.PriorityKey = v end)
+table.insert(AllBinds, b1); table.insert(AllBinds, b2); table.insert(AllBinds, b3); table.insert(AllBinds, b4); table.insert(AllBinds, b5)
 
-section(pageSettings, "LOCK KEYS", "Custom keys that activate the regular lock. Add or remove any key.")
-
-local function isKeyInLockKeys(key)
-    for _, k in ipairs(Config.LockKeys) do
-        if k == key then return true end
-    end
-    return false
-end
-
-local lockKeysList = new("Frame", {
-    Size = UDim2.new(1, -4, 0, 0),
-    AutomaticSize = Enum.AutomaticSize.Y,
-    BackgroundTransparency = 1,
-}, pageSettings)
-new("UIListLayout", {
-    Padding = UDim.new(0, 6),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, lockKeysList)
-
-local rebuildLockKeysList
-
-local function addKeyRow(key, order)
-    local row = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 36),
-        BackgroundColor3 = TurboTheme.Panel2,
-        BorderSizePixel = 0,
-        LayoutOrder = order,
-    }, lockKeysList)
-    corner(row, 8)
-
-    local t = label(row, key.Name, 12, TurboTheme.Text, true)
-    t.Position = UDim2.fromOffset(12, 0)
-    t.Size = UDim2.new(1, -60, 1, 0)
-
-    local removeBtn = new("TextButton", {
-        Size = UDim2.fromOffset(28, 24),
-        Position = UDim2.new(1, -38, 0.5, -12),
-        BackgroundColor3 = TurboTheme.Red,
-        BorderSizePixel = 0,
-        Text = "✕",
-        TextColor3 = Color3.new(1, 1, 1),
-        TextSize = 12,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-    }, row)
-    corner(removeBtn, 6)
-    turboConnect(removeBtn.MouseButton1Click, function()
-        for i, k in ipairs(Config.LockKeys) do
-            if k == key then
-                table.remove(Config.LockKeys, i)
-                break
-            end
-        end
-        rebuildLockKeysList()
-    end)
-end
-
-rebuildLockKeysList = function()
-    for _, child in ipairs(lockKeysList:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-    for i, key in ipairs(Config.LockKeys) do
-        addKeyRow(key, i)
-    end
-end
-rebuildLockKeysList()
-
-local addKeyRowFrame = new("Frame", {
-    Size = UDim2.new(1, -4, 0, 42),
-    BackgroundColor3 = TurboTheme.Panel2,
-    BorderSizePixel = 0,
-}, pageSettings)
-corner(addKeyRowFrame, 8)
-
-local addKeyLabel = label(addKeyRowFrame, "Add a new lock key", 12)
-addKeyLabel.Position = UDim2.fromOffset(12, 0)
-addKeyLabel.Size = UDim2.new(0.5, 0, 1, 0)
-
-local addKeyBtn = new("TextButton", {
-    Size = UDim2.fromOffset(120, 26),
-    Position = UDim2.new(1, -132, 0.5, -13),
-    BackgroundColor3 = TurboTheme.Background,
-    BorderSizePixel = 0,
-    Text = "+ Add Key",
-    TextColor3 = TurboTheme.Text,
-    TextSize = 11,
-    Font = Enum.Font.Gotham,
-    AutoButtonColor = false,
-}, addKeyRowFrame)
-corner(addKeyBtn, 6)
-stroke(addKeyBtn, TurboTheme.Stroke, 1)
-
-local listeningForNewKey = false
-turboConnect(addKeyBtn.MouseButton1Click, function()
-    listeningForNewKey = true
-    addKeyBtn.Text = "..."
-    addKeyBtn.TextColor3 = TurboTheme.Accent
-end)
-
-turboConnect(UserInputService.InputBegan, function(input)
-    if listeningForNewKey and input.UserInputType == Enum.UserInputType.Keyboard then
-        listeningForNewKey = false
-        addKeyBtn.Text = "+ Add Key"
-        addKeyBtn.TextColor3 = TurboTheme.Text
-        if not isKeyInLockKeys(input.KeyCode) then
-            table.insert(Config.LockKeys, input.KeyCode)
-            rebuildLockKeysList()
-        end
-    end
-end)
-
-section(pageSettings, "LOCK TIMING", "Hold vs click behaviour.")
-numberBox(pageSettings, "Hold Threshold",
+local cTiming = Card(pageST.right, "Lock Timing")
+Slider(cTiming, "Hold Threshold", 0, 1, 2,
     function() return Config.HoldThreshold end,
-    function(v) Config.HoldThreshold = v end, 0, 3, 3)
-numberBox(pageSettings, "Click Lock Duration",
+    function(v) Config.HoldThreshold = v end)
+Slider(cTiming, "Click Lock Duration", 0, 2, 2,
     function() return Config.ClickLockDuration end,
-    function(v) Config.ClickLockDuration = v end, 0, 5, 3)
-numberBox(pageSettings, "Mouse / Skill Hold Threshold",
+    function(v) Config.ClickLockDuration = v end)
+Slider(cTiming, "Mouse Hold Threshold", 0, 1, 2,
     function() return Config.MouseHoldThreshold end,
-    function(v) Config.MouseHoldThreshold = v end, 0, 3, 3)
-numberBox(pageSettings, "Mouse Click Lock Duration",
+    function(v) Config.MouseHoldThreshold = v end)
+Slider(cTiming, "Mouse Click Duration", 0, 2, 2,
     function() return Config.MouseClickLockDuration end,
-    function(v) Config.MouseClickLockDuration = v end, 0, 5, 3)
-toggle(pageSettings, "Use Mouse Button 1",
+    function(v) Config.MouseClickLockDuration = v end)
+Toggle(cTiming, "Use Mouse Button 1",
     function() return Config.UseMouseButton1 end,
     function(v) Config.UseMouseButton1 = v end)
 
-section(pageSettings, "MENU", "Turbo interface appearance.")
-local colors = {
-    Purple = Color3.fromRGB(118, 91, 255),
-    Blue   = Color3.fromRGB(65, 145, 255),
-    Cyan   = Color3.fromRGB(40, 190, 190),
-    Pink   = Color3.fromRGB(225, 82, 164),
-}
-local colorOrder = {"Purple", "Blue", "Cyan", "Pink"}
+local cLK = Card(pageST.right, "Lock Keys")
+local keyRow = New("Frame", {
+    Size = UDim2.new(1, 0, 0, 30),
+    BackgroundTransparency = 1,
+}, cLK)
+New("UIListLayout", {
+    FillDirection = Enum.FillDirection.Horizontal,
+    Padding = UDim.new(0, 5),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, keyRow)
 
-local currentAccentName = "Purple"
-dropdown(pageSettings, "Menu Accent Color",
-    function() return currentAccentName end,
+local commonKeys = {
+    {Enum.KeyCode.One, "1"}, {Enum.KeyCode.Two, "2"}, {Enum.KeyCode.Three, "3"},
+    {Enum.KeyCode.Four, "4"}, {Enum.KeyCode.F, "F"}, {Enum.KeyCode.E, "E"},
+    {Enum.KeyCode.R, "R"}, {Enum.KeyCode.G, "G"},
+}
+local function isKeyIn(key)
+    for _, k in ipairs(Config.LockKeys) do if k == key then return true end end
+    return false
+end
+local function toggleKey(key)
+    for i, k in ipairs(Config.LockKeys) do
+        if k == key then table.remove(Config.LockKeys, i) return end
+    end
+    table.insert(Config.LockKeys, key)
+end
+for i, e in ipairs(commonKeys) do
+    local key, name = e[1], e[2]
+    local btn = New("TextButton", {
+        Size = UDim2.fromOffset(34, 26),
+        BackgroundColor3 = isKeyIn(key) and Theme.Accent or Theme.Element,
+        BorderSizePixel = 0,
+        Text = name,
+        TextColor3 = Theme.Text,
+        TextSize = 12,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = false,
+        LayoutOrder = i,
+    }, keyRow)
+    Corner(btn, 5)
+    btn.Activated:Connect(function()
+        toggleKey(key)
+        btn.BackgroundColor3 = isKeyIn(key) and Theme.Accent or Theme.Element
+    end)
+end
+
+local cMenu = Card(pageST.left, "Menu Theme")
+Dropdown(cMenu, "Theme",
+    {"Red", "Purple", "Blue"},
+    function() return CurrentThemeName end,
     function(v)
-        local c = colors[v]
-        if not c then return end
-        currentAccentName = v
-        TurboTheme.Accent = c
-        TurboTheme.Accent2 = c
-        for n, b in pairs(tabButtons) do
-            if n == currentPage then
-                b.BackgroundColor3 = TurboTheme.Accent
+        if Themes[v] then
+            CurrentThemeName = v
+            -- partial live update of accents
+            Theme = Themes[v]
+            TopLine.BackgroundColor3 = Theme.Accent
+            for _, p in pairs(Pages) do
+                p.page.ScrollBarImageColor3 = Theme.Accent
+            end
+            for _, btn in pairs(TabButtons) do
+                local ind = btn:FindFirstChild("Indicator")
+                if ind then ind.BackgroundColor3 = Theme.Accent end
             end
         end
-        for _, p in pairs(pages) do
-            p.ScrollBarImageColor3 = TurboTheme.Accent
-        end
-        statusDot.BackgroundColor3 = TurboTheme.Green
-    end,
-    colorOrder
-)
+    end)
 
-section(pageSettings, "SAVE", "Save the current configuration to a file (TurboLockConfig.json).")
+-- =====================================================
+-- CONFIG SAVE / LOAD
+-- =====================================================
+local SAVE_FOLDER = "TurboConfigs"
+local SAVE_FILE = "TurboConfigs/default.json"
 
-local saveConfigRow = new("Frame", {
-    Size = UDim2.new(1, -4, 0, 42),
-    BackgroundColor3 = TurboTheme.Panel2,
-    BorderSizePixel = 0,
-}, pageSettings)
-corner(saveConfigRow, 8)
-
-local saveConfigLabel = label(saveConfigRow, "Save Config", 12)
-saveConfigLabel.Position = UDim2.fromOffset(12, 0)
-saveConfigLabel.Size = UDim2.new(0.5, 0, 1, 0)
-
-local saveConfigBtn = new("TextButton", {
-    Size = UDim2.fromOffset(120, 26),
-    Position = UDim2.new(1, -132, 0.5, -13),
-    BackgroundColor3 = TurboTheme.Background,
-    BorderSizePixel = 0,
-    Text = "Save",
-    TextColor3 = TurboTheme.Text,
-    TextSize = 11,
-    Font = Enum.Font.GothamBold,
-    AutoButtonColor = false,
-}, saveConfigRow)
-corner(saveConfigBtn, 6)
-stroke(saveConfigBtn, TurboTheme.Stroke, 1)
-
-local function serializeValue(v)
-    if typeof(v) == "EnumItem" then
-        return v.Name
-    elseif typeof(v) == "Vector3" then
-        return {v.X, v.Y, v.Z}
-    elseif type(v) == "table" then
-        local out = {}
-        for k2, v2 in pairs(v) do
-            out[k2] = serializeValue(v2)
-        end
-        return out
-    else
-        return v
-    end
+local function keyToStr(k)
+    if typeof(k) == "EnumItem" then return k.Name end
+    return tostring(k)
+end
+local function strToKey(s)
+    local ok, k = pcall(function() return Enum.KeyCode[s] end)
+    if ok and k then return k end
+    return Enum.KeyCode.Unknown
 end
 
-local function getFileWriter()
-    -- Different executors expose the file-write function under different names.
-    -- Potassium / most Roblox exploit executors expose "writefile" globally.
-    if writefile then return writefile end
-    if _G.writefile then return _G.writefile end
-    if syn and syn.write_file then return syn.write_file end
-    if fluxus and fluxus.writefile then return fluxus.writefile end
-    if getfenv and getfenv().writefile then return getfenv().writefile end
-    return nil
+local function serializeConfig()
+    local lockKeyNames = {}
+    for _, k in ipairs(Config.LockKeys) do
+        table.insert(lockKeyNames, keyToStr(k))
+    end
+    return {
+        RotateMode = Config.RotateMode,
+        TurnDeadzoneDegrees = Config.TurnDeadzoneDegrees,
+        ZeroDeadzoneWhenHolding = Config.ZeroDeadzoneWhenHolding,
+        UsePrediction = Config.UsePrediction,
+        PredictionStrength = Config.PredictionStrength,
+        PredictionMaxSpeed = Config.PredictionMaxSpeed,
+        PredictionHistorySmoothing = Config.PredictionHistorySmoothing,
+        AimPointDefault = Config.AimPointBySource.default,
+        AimOffsetDefault = Config.AimOffsetBySource.default,
+        AboveHeadHeight = Config.AboveHeadHeight,
+        AimSmooth = Config.AimSmooth,
+        UseSmoothTurn = Config.UseSmoothTurn,
+        Smoothness = Config.Smoothness,
+        BehindHoldDelay = Config.BehindHoldDelay,
+        BehindDistance = Config.BehindDistance,
+        BehindSmoothTime = Config.BehindSmoothTime,
+        EnableTeleport = Config.EnableTeleport,
+        BlockRetargetClosest = Config.BlockRetargetClosest,
+        SkillRetargetClosest = Config.SkillRetargetClosest,
+        MouseRetargetClosest = Config.MouseRetargetClosest,
+        UltraScanInterval = Config.UltraScanInterval,
+        MinLockDistance = Config.MinLockDistance,
+        MaxLockDistance = Config.MaxLockDistance,
+        StrongValidation = Config.StrongValidation,
+        InstantBehindSnap = Config.InstantBehindSnap,
+        IgnoreActiveCounter = Config.IgnoreActiveCounter,
+        TargetPriority = Config.TargetPriority,
+        ToggleKey = keyToStr(Config.ToggleKey),
+        EnableLockKey = keyToStr(Config.EnableLockKey),
+        StickyLockKey = keyToStr(Config.StickyLockKey),
+        BehindKey = keyToStr(Config.BehindKey),
+        PriorityKey = keyToStr(Config.PriorityKey),
+        HoldThreshold = Config.HoldThreshold,
+        ClickLockDuration = Config.ClickLockDuration,
+        MouseHoldThreshold = Config.MouseHoldThreshold,
+        MouseClickLockDuration = Config.MouseClickLockDuration,
+        UseMouseButton1 = Config.UseMouseButton1,
+        LockKeys = lockKeyNames,
+        IgnoreAlliesEnabled = Config.IgnoreAllies.Enabled,
+        IgnoreAlliesUseUserId = Config.IgnoreAllies.UseUserId,
+        IgnoreAlliesUserIds = Config.IgnoreAllies.UserIds,
+        IgnoreAlliesNames = Config.IgnoreAllies.Names,
+        Theme = CurrentThemeName,
+    }
 end
 
-local function saveConfigToFile()
-    local data = {}
-    local ok1, err1 = pcall(function()
-        for k, v in pairs(Config) do
-            data[k] = serializeValue(v)
+local function applyConfig(data)
+    if not data or type(data) ~= "table" then return false end
+    local function set(k, v)
+        if v ~= nil then Config[k] = v end
+    end
+    set("RotateMode", data.RotateMode)
+    set("TurnDeadzoneDegrees", data.TurnDeadzoneDegrees)
+    set("ZeroDeadzoneWhenHolding", data.ZeroDeadzoneWhenHolding)
+    set("UsePrediction", data.UsePrediction)
+    set("PredictionStrength", data.PredictionStrength)
+    set("PredictionMaxSpeed", data.PredictionMaxSpeed)
+    set("PredictionHistorySmoothing", data.PredictionHistorySmoothing)
+    if data.AimPointDefault then
+        Config.AimPointBySource.default = data.AimPointDefault
+        Config.AimPointBySource.sticky = data.AimPointDefault
+        Config.AimPointBySource.priority = data.AimPointDefault
+    end
+    if data.AimOffsetDefault then
+        Config.AimOffsetBySource.default = data.AimOffsetDefault
+        Config.AimOffsetBySource.sticky = data.AimOffsetDefault
+        Config.AimOffsetBySource.priority = data.AimOffsetDefault
+    end
+    set("AboveHeadHeight", data.AboveHeadHeight)
+    set("AimSmooth", data.AimSmooth)
+    set("UseSmoothTurn", data.UseSmoothTurn)
+    set("Smoothness", data.Smoothness)
+    set("BehindHoldDelay", data.BehindHoldDelay)
+    set("BehindDistance", data.BehindDistance)
+    set("BehindSmoothTime", data.BehindSmoothTime)
+    set("EnableTeleport", data.EnableTeleport)
+    set("BlockRetargetClosest", data.BlockRetargetClosest)
+    set("SkillRetargetClosest", data.SkillRetargetClosest)
+    set("MouseRetargetClosest", data.MouseRetargetClosest)
+    set("UltraScanInterval", data.UltraScanInterval)
+    set("MinLockDistance", data.MinLockDistance)
+    set("MaxLockDistance", data.MaxLockDistance)
+    set("StrongValidation", data.StrongValidation)
+    set("InstantBehindSnap", data.InstantBehindSnap)
+    set("IgnoreActiveCounter", data.IgnoreActiveCounter)
+    set("TargetPriority", data.TargetPriority)
+    if data.ToggleKey then Config.ToggleKey = strToKey(data.ToggleKey) end
+    if data.EnableLockKey then Config.EnableLockKey = strToKey(data.EnableLockKey) end
+    if data.StickyLockKey then Config.StickyLockKey = strToKey(data.StickyLockKey) end
+    if data.BehindKey then Config.BehindKey = strToKey(data.BehindKey) end
+    if data.PriorityKey then Config.PriorityKey = strToKey(data.PriorityKey) end
+    set("HoldThreshold", data.HoldThreshold)
+    set("ClickLockDuration", data.ClickLockDuration)
+    set("MouseHoldThreshold", data.MouseHoldThreshold)
+    set("MouseClickLockDuration", data.MouseClickLockDuration)
+    set("UseMouseButton1", data.UseMouseButton1)
+    if type(data.LockKeys) == "table" then
+        Config.LockKeys = {}
+        for _, name in ipairs(data.LockKeys) do
+            local k = strToKey(name)
+            if k ~= Enum.KeyCode.Unknown then table.insert(Config.LockKeys, k) end
         end
-    end)
-    if not ok1 then
-        return false, "serialize error: " .. tostring(err1)
     end
-
-    local ok2, jsonOrErr = pcall(function()
-        local HttpService = game:GetService("HttpService")
-        return HttpService:JSONEncode(data)
-    end)
-    if not ok2 then
-        return false, "json encode error: " .. tostring(jsonOrErr)
+    if data.IgnoreAlliesEnabled ~= nil then Config.IgnoreAllies.Enabled = data.IgnoreAlliesEnabled end
+    if data.IgnoreAlliesUseUserId ~= nil then Config.IgnoreAllies.UseUserId = data.IgnoreAlliesUseUserId end
+    if type(data.IgnoreAlliesUserIds) == "table" then Config.IgnoreAllies.UserIds = data.IgnoreAlliesUserIds end
+    if type(data.IgnoreAlliesNames) == "table" then Config.IgnoreAllies.Names = data.IgnoreAlliesNames end
+    rebuildAllyCache()
+    if data.Theme and Themes[data.Theme] then
+        CurrentThemeName = data.Theme
+        Theme = Themes[data.Theme]
+        TopLine.BackgroundColor3 = Theme.Accent
     end
-
-    local writer = getFileWriter()
-    if not writer then
-        return false, "writefile not found in this executor (Potassium should expose 'writefile')"
-    end
-
-    local ok3, err3 = pcall(function()
-        writer("TurboLockConfig.json", jsonOrErr)
-    end)
-    if not ok3 then
-        return false, "writefile error: " .. tostring(err3)
-    end
-
     return true
 end
 
-turboConnect(saveConfigBtn.MouseButton1Click, function()
-    local ok, err = saveConfigToFile()
-    if ok then
-        saveConfigBtn.Text = "Saved!"
-        saveConfigBtn.TextColor3 = TurboTheme.Green
-        print("[Turbo] Config salvo em TurboLockConfig.json")
-    else
-        saveConfigBtn.Text = "Erro!"
-        saveConfigBtn.TextColor3 = TurboTheme.Red
-        warn("[Turbo] Falha ao salvar config: " .. tostring(err))
+local function canFS()
+    return type(writefile) == "function" and type(readfile) == "function"
+end
+
+local function ensureFolder()
+    if type(isfolder) == "function" and type(makefolder) == "function" then
+        if not isfolder(SAVE_FOLDER) then
+            pcall(makefolder, SAVE_FOLDER)
+        end
     end
-    task.delay(1.5, function()
-        saveConfigBtn.Text = "Save"
-        saveConfigBtn.TextColor3 = TurboTheme.Text
+end
+
+local function saveConfig(name)
+    name = name or "default"
+    local path = SAVE_FOLDER .. "/" .. name .. ".json"
+    local ok, err = pcall(function()
+        ensureFolder()
+        local json = HttpService:JSONEncode(serializeConfig())
+        if canFS() then
+            writefile(path, json)
+        else
+            if type(setclipboard) == "function" then
+                setclipboard(json)
+            end
+            error("No writefile — config copied to clipboard instead")
+        end
     end)
+    return ok, err
+end
+
+local function loadConfig(name)
+    name = name or "default"
+    local path = SAVE_FOLDER .. "/" .. name .. ".json"
+    local ok, data = pcall(function()
+        if canFS() and (type(isfile) ~= "function" or isfile(path)) then
+            local raw = readfile(path)
+            return HttpService:JSONDecode(raw)
+        end
+        error("File not found or no readfile")
+    end)
+    if ok and data then
+        applyConfig(data)
+        return true
+    end
+    return false, data
+end
+
+local cSave = Card(pageCF.left, "Save / Load")
+local statusCfg = Label(cSave, "Status: ready", 11, Theme.SubText)
+statusCfg.Size = UDim2.new(1, 0, 0, 20)
+
+local nameBox = New("TextBox", {
+    Size = UDim2.new(1, 0, 0, 28),
+    BackgroundColor3 = Theme.Element,
+    Text = "default",
+    PlaceholderText = "config name",
+    TextColor3 = Theme.Text,
+    PlaceholderColor3 = Theme.SubText,
+    TextSize = 12,
+    Font = Enum.Font.Gotham,
+    ClearTextOnFocus = false,
+    BorderSizePixel = 0,
+}, cSave)
+Corner(nameBox, 5)
+
+local function makeBtn(parent, text, color, fn)
+    local b = New("TextButton", {
+        Size = UDim2.new(1, 0, 0, 32),
+        BackgroundColor3 = color or Theme.Accent,
+        BorderSizePixel = 0,
+        Text = text,
+        TextColor3 = Color3.new(1,1,1),
+        TextSize = 12,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = false,
+    }, parent)
+    Corner(b, 6)
+    b.Activated:Connect(fn)
+    return b
+end
+
+makeBtn(cSave, "Save Config", Theme.Accent, function()
+    local name = nameBox.Text
+    if name == "" then name = "default" end
+    local ok, err = saveConfig(name)
+    if ok then
+        statusCfg.Text = "Status: saved → " .. name
+        statusCfg.TextColor3 = Theme.Green
+    else
+        statusCfg.Text = "Status: " .. tostring(err)
+        statusCfg.TextColor3 = Theme.Red
+    end
 end)
 
-local footer = label(main, "Turbo  ·  " .. Config.ToggleKey.Name .. " to toggle  ·  All controls write directly to Config", 10, TurboTheme.SubText)
-footer.Position = UDim2.fromOffset(210, 556)
-footer.Size = UDim2.fromOffset(640, 16)
+makeBtn(cSave, "Load Config", Theme.AccentDark, function()
+    local name = nameBox.Text
+    if name == "" then name = "default" end
+    local ok, err = loadConfig(name)
+    if ok then
+        statusCfg.Text = "Status: loaded ← " .. name .. " (reopen menu if UI stale)"
+        statusCfg.TextColor3 = Theme.Green
+        rebuildPlayerList()
+        for _, b in ipairs(AllBinds) do if b.Refresh then b.Refresh() end end
+    else
+        statusCfg.Text = "Status: load failed — " .. tostring(err)
+        statusCfg.TextColor3 = Theme.Red
+    end
+end)
 
+makeBtn(cSave, "Copy Config to Clipboard", Theme.Element, function()
+    local ok, err = pcall(function()
+        local json = HttpService:JSONEncode(serializeConfig())
+        if type(setclipboard) == "function" then
+            setclipboard(json)
+        else
+            error("setclipboard not available")
+        end
+    end)
+    if ok then
+        statusCfg.Text = "Status: copied to clipboard"
+        statusCfg.TextColor3 = Theme.Green
+    else
+        statusCfg.Text = "Status: " .. tostring(err)
+        statusCfg.TextColor3 = Theme.Red
+    end
+end)
+
+local cInfo = Card(pageCF.right, "Info")
+local infoLbl = Label(cInfo, "Configs are saved as JSON in the TurboConfigs folder (executor filesystem).\n\nIf writefile is unavailable, Save copies JSON to clipboard.\n\nAfter Load, some UI labels refresh automatically; reopen tabs if needed.", 11, Theme.SubText)
+infoLbl.Size = UDim2.new(1, 0, 0, 120)
+infoLbl.TextWrapped = true
+infoLbl.TextYAlignment = Enum.TextYAlignment.Top
+
+-- =====================================================
+-- DRAG
+-- =====================================================
 do
-    local dragging = false
-    local dragStart, startPos
-
-    turboConnect(top.InputBegan, function(input)
+    local dragging, dragStart, startPos
+    TopBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
-            startPos = main.Position
+            startPos = Main.Position
         end
     end)
-
-    turboConnect(UserInputService.InputChanged, function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            main.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
+    TopBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end)
-
-    turboConnect(UserInputService.InputEnded, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+        local d = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
     end)
 end
 
-local function setMenuVisible(v)
-    main.Visible = v
-    if not v then
-        for _, list in ipairs(allDropdownLists) do
-            list.Visible = false
-        end
-    end
+-- =====================================================
+-- MENU STATE / FOCUS
+-- =====================================================
+local MenuOpen = true
+
+local function ClearFocus()
+    local f = UserInputService:GetFocusedTextBox()
+    if f then pcall(function() f:ReleaseFocus() end) end
+    pcall(function() GuiService.SelectedObject = nil end)
 end
 
-turboConnect(UserInputService.InputBegan, function(input, processed)
-    if processed then return end
-    if input.KeyCode == Config.ToggleKey then
-        setMenuVisible(not main.Visible)
-    end
-end)
-
-RunService.Heartbeat:Connect(function()
-    if lockEnabled then
-        status.Text = "ACTIVE"
-        status.TextColor3 = TurboTheme.Green
-        statusDot.BackgroundColor3 = TurboTheme.Green
+local function SetMenu(state)
+    MenuOpen = state
+    if not state then
+        CloseDropdown()
+        if BindingBtn then
+            BindingBtn.TextColor3 = Theme.Text
+            BindingBtn = nil
+        end
+        ClearFocus()
+        ScreenGui.Enabled = false
     else
-        status.Text = "OFF"
-        status.TextColor3 = TurboTheme.Red
-        statusDot.BackgroundColor3 = TurboTheme.Red
+        ScreenGui.Enabled = true
+        ClearFocus()
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+
+    if input.KeyCode == Config.ToggleKey then
+        SetMenu(not MenuOpen)
+        return
+    end
+
+    if BindingBtn then
+        if input.KeyCode == Enum.KeyCode.Escape then
+            BindingBtn.TextColor3 = Theme.Text
+            for _, b in ipairs(AllBinds) do if b.Refresh then b.Refresh() end end
+            BindingBtn = nil
+            return
+        end
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            for _, b in ipairs(AllBinds) do
+                if b._btn == BindingBtn then
+                    b._setter(input.KeyCode)
+                    break
+                end
+            end
+            BindingBtn.Text = KeyName(input.KeyCode)
+            BindingBtn.TextColor3 = Theme.Text
+            BindingBtn = nil
+            ClearFocus()
+        end
     end
 end)
 
-selectPage("CharacterLock")
-setMenuVisible(true)
+-- Status from lock
+onLockEnabledChanged = function(enabled)
+    if enabled then
+        StatusLbl.Text = "● ACTIVE"
+        StatusLbl.TextColor3 = Theme.Green
+    else
+        StatusLbl.Text = "● OFF"
+        StatusLbl.TextColor3 = Theme.Red
+    end
+end
+onLockEnabledChanged(lockEnabled)
 
-print("Turbo GUI loaded | " .. Config.ToggleKey.Name .. " = menu")
+-- Default tab
+SelectTab("CharacterLock")
+SetMenu(true)
+
+print("Turbo GUI v4 | Save/Load | " .. Config.ToggleKey.Name .. " = menu | " .. Config.EnableLockKey.Name .. " = lock")
