@@ -26,6 +26,8 @@ local Config = {
     UseMouseButton1      = true,
     ToggleKey            = Enum.KeyCode.Insert,
     EnableLockKey        = Enum.KeyCode.CapsLock,
+    BlockKey             = Enum.KeyCode.F,
+    PanicKey             = Enum.KeyCode.End,
     BehindKey            = Enum.KeyCode.Q,
     PriorityKey          = Enum.KeyCode.LeftAlt,
     PriorityAlsoRightAlt = false,
@@ -148,6 +150,7 @@ local stickyTarget = nil
 local disableUntil = 0
 local lastState
 local lockEnabled = true
+local turboPanicked = false
 local activeLockKey
 local lockStartTime, lockExpireTime = 0, 0
 local currentLockSource
@@ -853,7 +856,24 @@ local function shouldRetarget()
 end
 
 local function isActivelyHolding()
-    return activeLockKey ~= nil or isHoldingMouse == true
+    if isHoldingMouse then return true end
+    if activeLockKey ~= nil then
+        -- Still physically held? (guards against missed InputEnded / game sinking keys)
+        if UserInputService:IsKeyDown(activeLockKey) then
+            return true
+        end
+        return true -- key marked active until InputEnded clears it
+    end
+    -- Fallback: any configured lock key currently down
+    for _, k in ipairs(Config.LockKeys) do
+        if UserInputService:IsKeyDown(k) then
+            return true
+        end
+    end
+    if Config.UseMouseButton1 and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        return true
+    end
+    return false
 end
 
 local function isAerialState(state)
@@ -994,6 +1014,7 @@ end
 -- ======================================================
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
+    if turboPanicked then return end
     if input.KeyCode == Config.ToggleKey then
         return
     end
@@ -1048,7 +1069,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
         activeLockKey = input.KeyCode
         lockStartTime = tick()
         lockExpireTime = 0
-        tryActivateLock(isBlockKey(input.KeyCode) and "block" or "skill")
+        currentLockSource = isBlockKey(input.KeyCode) and "block" or "skill"
+        tryActivateLock(currentLockSource)
         local s3 = Config.Skill3BehindTP
         if s3 and s3.Enabled and input.KeyCode == (s3.Key or Enum.KeyCode.Three) then
             scheduleSkill3BehindTP()
@@ -1070,16 +1092,21 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
+    if turboPanicked then return end
+
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         if isHoldingMouse then
-            local held = tick() - mousePressTime
+            local held = tick() - (mousePressTime > 0 and mousePressTime or tick())
             isHoldingMouse = false
             if lockEnabled then
-                if held >= Config.MouseHoldThreshold then
+                -- Hold: release stops lock. Click (short): keep lock for Click duration.
+                local threshold = tonumber(Config.MouseHoldThreshold) or 0.14
+                if held >= threshold then
                     if not stickyTarget then hardClearLock() end
                     activeLockKey = nil
+                    lockExpireTime = 0
                 else
-                    lockExpireTime = tick() + Config.MouseClickLockDuration
+                    lockExpireTime = tick() + (tonumber(Config.MouseClickLockDuration) or 0.25)
                     currentLockSource = "mouse"
                 end
             end
@@ -1089,16 +1116,40 @@ UserInputService.InputEnded:Connect(function(input)
     if not lockEnabled then return end
     if input.KeyCode == Config.StickyLockKey then return end
     if isPriorityKey(input.KeyCode) then return end
+
+    -- Skill / lock keys: measure real hold time
     if activeLockKey and activeLockKey == input.KeyCode then
-        if (tick() - lockStartTime) >= Config.HoldThreshold then
+        local start = (lockStartTime > 0) and lockStartTime or tick()
+        local held = tick() - start
+        local threshold = tonumber(Config.HoldThreshold) or 0.14
+        activeLockKey = nil
+        if held >= threshold then
+            -- Held long enough → treat as hold, clear on release
             if not stickyTarget then hardClearLock() end
-            activeLockKey = nil
+            lockExpireTime = 0
         else
-            activeLockKey = nil
-            lockExpireTime = tick() + Config.ClickLockDuration
+            -- Short tap → keep aiming for ClickLockDuration
+            lockExpireTime = tick() + (tonumber(Config.ClickLockDuration) or 0.32)
         end
         return
     end
+
+    -- Also handle lock key release even if activeLockKey was lost
+    if isLockKey(input.KeyCode) then
+        local start = (lockStartTime > 0) and lockStartTime or tick()
+        local held = tick() - start
+        local threshold = tonumber(Config.HoldThreshold) or 0.14
+        if held >= threshold then
+            if not stickyTarget and not isHoldingMouse then
+                hardClearLock()
+            end
+            lockExpireTime = 0
+        elseif lockEnabled and lockedTarget then
+            lockExpireTime = tick() + (tonumber(Config.ClickLockDuration) or 0.32)
+        end
+        return
+    end
+
     if input.KeyCode == Config.BehindKey then
         isHoldingQ, qLocked = false, false
     end
@@ -1108,6 +1159,7 @@ end)
 -- NUCLEO TRIPLO INSTANTANEO
 -- ======================================================
 local function doLock(dt)
+    if turboPanicked then return end
     if not lockEnabled or not rootPart or not humanoid or not humanoid.Parent then return end
     if isSelfRagdolled() then
         if lockedTarget and not stickyTarget then hardClearLock() end
@@ -1157,7 +1209,7 @@ local function doLock(dt)
             trySmoothBehind()
         end
     end
-    local shouldHaveLock = activeLockKey ~= nil or isHoldingMouse or stickyTarget ~= nil
+    local shouldHaveLock = activeLockKey ~= nil or isHoldingMouse or stickyTarget ~= nil or isActivelyHolding()
     if not shouldHaveLock and lockExpireTime > 0 then
         if tick() < lockExpireTime then
             shouldHaveLock = true
@@ -1315,1307 +1367,1049 @@ print("Character Lock TRIPLO INSTANTANEO | CFrame 3x | Root 360")
 
 
 -- ============================================================
--- TURBO GUI v4  |  Reference framework + Save/Load
+-- TURBO GUI v5  |  Turbo style  |  Icons  |  Aim Parts  |  Accent  |  Panic
 -- ============================================================
 
 local GuiService = game:GetService("GuiService")
 local HttpService = game:GetService("HttpService")
-
 local PlayerGui = player:WaitForChild("PlayerGui")
 
--- Themes
-local Themes = {
-    Red = {
-        Background = Color3.fromRGB(18, 15, 16),
-        Panel = Color3.fromRGB(25, 20, 21),
-        Panel2 = Color3.fromRGB(32, 25, 27),
-        Element = Color3.fromRGB(38, 29, 31),
-        Stroke = Color3.fromRGB(65, 50, 53),
-        Text = Color3.fromRGB(242, 240, 240),
-        SubText = Color3.fromRGB(155, 145, 148),
-        Accent = Color3.fromRGB(230, 70, 85),
-        AccentDark = Color3.fromRGB(185, 45, 60),
-        Green = Color3.fromRGB(75, 205, 125),
-        Red = Color3.fromRGB(225, 75, 90),
-    },
-    Purple = {
-        Background = Color3.fromRGB(16, 16, 19),
-        Panel = Color3.fromRGB(22, 22, 26),
-        Panel2 = Color3.fromRGB(28, 28, 33),
-        Element = Color3.fromRGB(32, 32, 38),
-        Stroke = Color3.fromRGB(55, 55, 62),
-        Text = Color3.fromRGB(240, 240, 243),
-        SubText = Color3.fromRGB(145, 145, 153),
-        Accent = Color3.fromRGB(150, 80, 255),
-        AccentDark = Color3.fromRGB(115, 55, 205),
-        Green = Color3.fromRGB(75, 205, 125),
-        Red = Color3.fromRGB(225, 75, 90),
-    },
-    Blue = {
-        Background = Color3.fromRGB(15, 17, 20),
-        Panel = Color3.fromRGB(21, 24, 29),
-        Panel2 = Color3.fromRGB(27, 30, 36),
-        Element = Color3.fromRGB(32, 36, 43),
-        Stroke = Color3.fromRGB(55, 61, 70),
-        Text = Color3.fromRGB(240, 242, 245),
-        SubText = Color3.fromRGB(145, 151, 160),
-        Accent = Color3.fromRGB(70, 145, 255),
-        AccentDark = Color3.fromRGB(45, 105, 205),
-        Green = Color3.fromRGB(75, 205, 125),
-        Red = Color3.fromRGB(225, 75, 90),
-    },
+local accentElements = {} -- {object, prop} recolored on accent change
+local Theme = {
+    Bg = Color3.fromRGB(18, 18, 22),
+    Panel = Color3.fromRGB(24, 24, 30),
+    Panel2 = Color3.fromRGB(30, 30, 38),
+    Element = Color3.fromRGB(36, 36, 46),
+    Stroke = Color3.fromRGB(50, 50, 62),
+    Text = Color3.fromRGB(235, 235, 245),
+    SubText = Color3.fromRGB(140, 140, 160),
+    Accent = Color3.fromRGB(220, 55, 70),
+    Green = Color3.fromRGB(70, 200, 120),
+    Red = Color3.fromRGB(220, 70, 85),
 }
 
-local CurrentThemeName = "Red"
-local Theme = Themes[CurrentThemeName]
+-- Icon pack (GitHub raw). Cached via writefile + getcustomasset when available.
+local ICON_BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/Images/"
+local ICON_FILES = {
+    -- tabs
+    character = "character.png",
+    character_lock = "character_lock.png",
+    character_lock_active = "character_lock_active.png",
+    aim_parts = "aim_parts.png",
+    aimpart = "aimpart.png",
+    whitelist = "filter.png",
+    settings = "config.png",
+    config = "file_config.png",
+    -- methods / aim
+    methods = "methods.png",
+    method = "method.png",
+    rotate = "methods.png",
+    aim = "aim.png",
+    target = "target.png",
+    crosshair = "crosshair.png",
+    body_parts = "body_parts.png",
+    bodyparts = "bodyparts.png",
+    offset = "offset.png",
+    position = "position.png",
+    layers = "layers.png",
+    -- prediction / smooth / delay
+    prediction = "prediction.png",
+    smooth = "smooth.png",
+    delay = "delay.png",
+    deadzone = "deadzone.png",
+    clock = "clock.png",
+    time = "time.png",
+    hourglass = "hourglass.png",
+    speed = "speed.png",
+    boost = "boost.png",
+    -- distance / teleport
+    distance = "distance.png",
+    teleport = "teleport.png",
+    world = "world.png",
+    -- validation / shield
+    shield = "shield.png",
+    shield_block = "shield_block.png",
+    block = "block.png",
+    check = "check.png",
+    checkmark = "checkmark.png",
+    circle_check = "circle_check.png",
+    circle_cross = "circle_cross.png",
+    cross = "cross.png",
+    crossmark = "crossmark.png",
+    -- keys / input
+    keyboard = "keyboard.png",
+    mouse = "mouse.png",
+    bind = "bind.png",
+    unbound = "unbound.png",
+    always = "always.png",
+    -- priority / sticky / behind
+    priority = "priority.png",
+    behind = "behind.png",
+    -- status
+    active = "active.png",
+    enable = "enable.png",
+    disable = "disable.png",
+    play = "play.png",
+    pause = "pause.png",
+    stop = "stop.png",
+    danger = "danger.png",
+    warning = "warning.png",
+    panic = "panic.png",
+    -- config
+    save = "download.png",
+    load = "download.png",
+    download = "download.png",
+    file = "file.png",
+    file_config = "file_config.png",
+    reset = "reset.png",
+    info = "info.png",
+    eye = "eye.png",
+    hidden = "hidden.png",
+    filter = "filter.png",
+    contacts = "contacts.png",
+    dashboard = "dashboard.png",
+    chart = "chart.png",
+    console = "console.png",
+    code = "code.png",
+    circuit = "circuit_board.png",
+    close = "close.png",
+    firstperson = "firstperson.png",
+}
 
--- Clean old
-local old = PlayerGui:FindFirstChild("Turbo")
-if old then old:Destroy() end
+local iconCache = {}
+local function getIcon(name)
+    if iconCache[name] ~= nil then return iconCache[name] end
+    local file = ICON_FILES[name]
+    if not file then iconCache[name] = false; return nil end
+    local url = ICON_BASE .. file
+    local ok, result = pcall(function()
+        local folder = "TurboIcons"
+        if type(isfolder) == "function" and type(makefolder) == "function" then
+            if not isfolder(folder) then pcall(makefolder, folder) end
+        end
+        local path = folder .. "/" .. file
+        local needDownload = true
+        if type(isfile) == "function" and isfile(path) then
+            needDownload = false
+        end
+        if needDownload then
+            local data
+            if type(request) == "function" then
+                local res = request({Url = url, Method = "GET"})
+                data = res and (res.Body or res.body)
+            elseif type(http_request) == "function" then
+                local res = http_request({Url = url, Method = "GET"})
+                data = res and (res.Body or res.body)
+            elseif type(syn) == "table" and type(syn.request) == "function" then
+                local res = syn.request({Url = url, Method = "GET"})
+                data = res and (res.Body or res.body)
+            else
+                data = game:HttpGet(url)
+            end
+            if not data or #data < 50 then return nil end
+            if type(writefile) == "function" then
+                writefile(path, data)
+            else
+                return nil
+            end
+        end
+        -- Potassium / most executors
+        if type(getcustomasset) == "function" then
+            return getcustomasset(path)
+        end
+        if type(getsynasset) == "function" then
+            return getsynasset(path)
+        end
+        if type(getcustomasset) == "nil" and type(Drawing) == "table" then
+            return nil
+        end
+        return nil
+    end)
+    if ok and result and type(result) == "string" and #result > 0 then
+        iconCache[name] = result
+        return result
+    end
+    iconCache[name] = false
+    return nil
+end
 
-local function New(class, props, parent)
-    local o = Instance.new(class)
-    for k, v in pairs(props or {}) do o[k] = v end
+local function New(c, p, parent)
+    local o = Instance.new(c)
+    for k, v in pairs(p or {}) do o[k] = v end
     if parent then o.Parent = parent end
     return o
 end
-
-local function Corner(p, r)
-    return New("UICorner", {CornerRadius = UDim.new(0, r or 7)}, p)
+local function Corner(p, r) return New("UICorner", {CornerRadius = UDim.new(0, r or 6)}, p) end
+local function Stroke(p, c, t) return New("UIStroke", {Color = c or Theme.Stroke, Thickness = t or 1}, p) end
+local function Tween(o, props, d)
+    TweenService:Create(o, TweenInfo.new(d or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
 end
-
-local function Stroke(p, c, t)
-    return New("UIStroke", {Color = c or Theme.Stroke, Thickness = t or 1}, p)
-end
-
-local function Tween(obj, props, dur)
-    TweenService:Create(obj, TweenInfo.new(dur or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
-end
-
 local function Label(parent, text, size, color, bold)
     return New("TextLabel", {
-        BackgroundTransparency = 1,
-        Text = text,
-        TextColor3 = color or Theme.Text,
-        TextSize = size or 13,
+        BackgroundTransparency = 1, Text = text,
+        TextColor3 = color or Theme.Text, TextSize = size or 12,
         Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Center,
-        BorderSizePixel = 0,
+        TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center,
+        BorderSizePixel = 0, TextTruncate = Enum.TextTruncate.AtEnd,
     }, parent)
 end
 
+local old = PlayerGui:FindFirstChild("Turbo")
+if old then old:Destroy() end
+
 local ScreenGui = New("ScreenGui", {
-    Name = "Turbo",
-    ResetOnSpawn = false,
-    IgnoreGuiInset = true,
+    Name = "Turbo", ResetOnSpawn = false, IgnoreGuiInset = true,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, PlayerGui)
 
 local Main = New("Frame", {
-    Name = "Main",
-    Size = UDim2.fromOffset(920, 580),
-    Position = UDim2.new(0.5, -460, 0.5, -290),
-    BackgroundColor3 = Theme.Background,
-    BorderSizePixel = 0,
-    Active = true,
-    ClipsDescendants = false,
+    Size = UDim2.fromOffset(920, 560),
+    Position = UDim2.new(0.5, -460, 0.5, -280),
+    BackgroundColor3 = Theme.Bg, BorderSizePixel = 0,
+    Active = true, ClipsDescendants = true,
 }, ScreenGui)
 Corner(Main, 10)
-Stroke(Main, Theme.Stroke)
+Stroke(Main)
 
--- Top
-local TopBar = New("Frame", {
-    Size = UDim2.new(1, 0, 0, 48),
-    BackgroundColor3 = Theme.Panel,
-    BorderSizePixel = 0,
-    Active = true,
+-- Header
+local Top = New("Frame", {
+    Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = Theme.Panel, BorderSizePixel = 0, Active = true,
 }, Main)
-Corner(TopBar, 10)
-New("Frame", {
-    Size = UDim2.new(1, 0, 0, 16),
-    Position = UDim2.new(0, 0, 1, -16),
-    BackgroundColor3 = Theme.Panel,
-    BorderSizePixel = 0,
-}, TopBar)
-local TopLine = New("Frame", {
-    Size = UDim2.new(1, 0, 0, 1),
-    Position = UDim2.new(0, 0, 1, 0),
-    BackgroundColor3 = Theme.Accent,
-    BorderSizePixel = 0,
-}, TopBar)
+Corner(Top, 10)
+New("Frame", {Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14), BackgroundColor3 = Theme.Panel, BorderSizePixel = 0}, Top)
+local TopLine = New("Frame", {Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Accent, BorderSizePixel = 0}, Top)
 
-local Title = Label(TopBar, "photon", 18, Theme.Accent, true)
+local Title = Label(Top, "Turbo", 18, Theme.Accent, true)
 Title.Position = UDim2.fromOffset(16, 0)
-Title.Size = UDim2.fromOffset(100, 48)
-
-local SubTitle = Label(TopBar, "turbo v4  |  CharacterLock", 11, Theme.SubText)
-SubTitle.Position = UDim2.fromOffset(110, 0)
-SubTitle.Size = UDim2.fromOffset(220, 48)
-
-local StatusLbl = Label(TopBar, "● ACTIVE", 11, Theme.Green, true)
-StatusLbl.Position = UDim2.new(1, -120, 0, 0)
-StatusLbl.Size = UDim2.fromOffset(105, 48)
+Title.Size = UDim2.fromOffset(80, 46)
+local Sub = Label(Top, "v5  ·  Character", 11, Theme.SubText)
+Sub.Position = UDim2.fromOffset(95, 0)
+Sub.Size = UDim2.fromOffset(240, 46)
+local StatusLbl = Label(Top, "● ACTIVE", 11, Theme.Green, true)
+StatusLbl.Position = UDim2.new(1, -115, 0, 0)
+StatusLbl.Size = UDim2.fromOffset(100, 46)
 StatusLbl.TextXAlignment = Enum.TextXAlignment.Right
 
 -- Sidebar
-local Sidebar = New("Frame", {
-    Size = UDim2.fromOffset(140, 532),
-    Position = UDim2.fromOffset(0, 48),
-    BackgroundColor3 = Theme.Panel,
-    BorderSizePixel = 0,
+local Side = New("Frame", {
+    Size = UDim2.fromOffset(178, 514), Position = UDim2.fromOffset(0, 46),
+    BackgroundColor3 = Theme.Panel, BorderSizePixel = 0,
 }, Main)
-New("Frame", {
-    Size = UDim2.fromOffset(1, 532),
-    Position = UDim2.new(1, -1, 0, 0),
-    BackgroundColor3 = Theme.Stroke,
-    BorderSizePixel = 0,
-}, Sidebar)
-
-local TabContainer = New("Frame", {
-    Size = UDim2.new(1, -16, 1, -20),
-    Position = UDim2.fromOffset(8, 12),
-    BackgroundTransparency = 1,
-}, Sidebar)
-New("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, TabContainer)
+New("Frame", {Size = UDim2.fromOffset(1, 514), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = Theme.Stroke, BorderSizePixel = 0}, Side)
+local TabBox = New("Frame", {
+    Size = UDim2.new(1, -12, 1, -16), Position = UDim2.fromOffset(6, 10), BackgroundTransparency = 1,
+}, Side)
+New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder}, TabBox)
 
 local Content = New("Frame", {
-    Size = UDim2.new(1, -140, 1, -48),
-    Position = UDim2.fromOffset(140, 48),
-    BackgroundTransparency = 1,
-    ClipsDescendants = false,
+    Size = UDim2.new(1, -178, 1, -46), Position = UDim2.fromOffset(178, 46),
+    BackgroundTransparency = 1, ClipsDescendants = true,
 }, Main)
 
-local Pages = {}
-local TabButtons = {}
+local Pages, TabBtns = {}, {}
+local currentTab = nil
 
-local function CreatePage(name)
-    local page = New("ScrollingFrame", {
-        Name = name,
-        Size = UDim2.new(1, -16, 1, -16),
-        Position = UDim2.fromOffset(8, 8),
-        BackgroundTransparency = 1,
-        ScrollBarThickness = 3,
-        ScrollBarImageColor3 = Theme.Accent,
-        CanvasSize = UDim2.new(0, 0, 0, 0),
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        Visible = false,
-        BorderSizePixel = 0,
-        ClipsDescendants = false,
+local function makePage(name)
+    local sc = New("ScrollingFrame", {
+        Name = name, Size = UDim2.new(1, -16, 1, -16), Position = UDim2.fromOffset(8, 8),
+        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4,
+        ScrollBarImageColor3 = Theme.Accent, CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false, ClipsDescendants = true,
         ScrollingDirection = Enum.ScrollingDirection.Y,
+        ElasticBehavior = Enum.ElasticBehavior.Never,
     }, Content)
-    -- two columns via grid
-    New("UIGridLayout", {
-        CellPadding = UDim2.fromOffset(10, 10),
-        CellSize = UDim2.new(0.5, -5, 0, 0),
-        FillDirectionMaxCells = 2,
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, page)
-    -- fix: use list of cards with automatic size instead of fixed grid height
-    page:FindFirstChildOfClass("UIGridLayout"):Destroy()
+    New("UIPadding", {
+        PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 6),
+        PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 12),
+    }, sc)
     local row = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        ClipsDescendants = false,
-    }, page)
-    local left = New("Frame", {
-        Name = "L",
-        Size = UDim2.new(0.5, -5, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        ClipsDescendants = false,
+        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1, ClipsDescendants = false,
+    }, sc)
+    local L = New("Frame", {
+        Name = "L", Size = UDim2.new(0.5, -6, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1, ClipsDescendants = false,
     }, row)
-    New("UIListLayout", {Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder}, left)
-    local right = New("Frame", {
-        Name = "R",
-        Size = UDim2.new(0.5, -5, 0, 0),
-        Position = UDim2.new(0.5, 5, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        ClipsDescendants = false,
+    New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, L)
+    local R = New("Frame", {
+        Name = "R", Size = UDim2.new(0.5, -6, 0, 0), Position = UDim2.new(0.5, 6, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ClipsDescendants = false,
     }, row)
-    New("UIListLayout", {Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder}, right)
-    Pages[name] = {page = page, left = left, right = right}
+    New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, R)
+    Pages[name] = {sc = sc, L = L, R = R}
     return Pages[name]
 end
 
-local function SelectTab(name)
-    for n, p in pairs(Pages) do
-        p.page.Visible = (n == name)
-    end
-    for n, btn in pairs(TabButtons) do
-        local on = (n == name)
-        btn.BackgroundTransparency = on and 0 or 1
-        btn.BackgroundColor3 = Theme.Element
-        local ind = btn:FindFirstChild("Indicator")
+local function selectTab(name)
+    currentTab = name
+    for n, p in pairs(Pages) do p.sc.Visible = (n == name) end
+    for n, b in pairs(TabBtns) do
+        local on = n == name
+        b.BackgroundTransparency = on and 0 or 1
+        b.BackgroundColor3 = Theme.Element
+        local ind = b:FindFirstChild("Ind")
         if ind then ind.Visible = on end
-        for _, c in ipairs(btn:GetChildren()) do
-            if c:IsA("TextLabel") then
-                if c.Name == "Icon" then
-                    c.TextColor3 = on and Theme.Accent or Theme.SubText
-                else
-                    c.TextColor3 = on and Theme.Text or Theme.SubText
-                end
-            end
+        local ic = b:FindFirstChild("IconImg")
+        if ic and ic:IsA("ImageLabel") then
+            ic.ImageColor3 = on and Theme.Accent or Theme.SubText
         end
+        local tx = b:FindFirstChild("TabText")
+        if tx then tx.TextColor3 = on and Theme.Text or Theme.SubText end
     end
 end
 
-local function CreateTab(name, icon, order)
-    local btn = New("TextButton", {
-        Size = UDim2.new(1, 0, 0, 36),
-        BackgroundColor3 = Theme.Element,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Text = "",
-        AutoButtonColor = false,
-        LayoutOrder = order,
-        Active = true,
-    }, TabContainer)
-    Corner(btn, 6)
+local function makeTab(name, iconName, order)
+    local b = New("TextButton", {
+        Size = UDim2.new(1, 0, 0, 54), BackgroundColor3 = Theme.Element,
+        BackgroundTransparency = 1, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
+        LayoutOrder = order, Active = true,
+    }, TabBox)
+    Corner(b, 7)
     local ind = New("Frame", {
-        Name = "Indicator",
-        Size = UDim2.fromOffset(3, 18),
-        Position = UDim2.new(0, 0, 0.5, -9),
-        BackgroundColor3 = Theme.Accent,
-        BorderSizePixel = 0,
-        Visible = false,
-    }, btn)
+        Name = "Ind", Size = UDim2.fromOffset(3, 32), Position = UDim2.new(0, 0, 0.5, -16),
+        BackgroundColor3 = Theme.Accent, BorderSizePixel = 0, Visible = false,
+    }, b)
     Corner(ind, 2)
-    local ic = Label(btn, icon, 14, Theme.SubText, true)
-    ic.Name = "Icon"
-    ic.Size = UDim2.fromOffset(24, 36)
-    ic.Position = UDim2.fromOffset(8, 0)
-    ic.TextXAlignment = Enum.TextXAlignment.Center
-    local tx = Label(btn, name, 12, Theme.SubText, true)
-    tx.Position = UDim2.fromOffset(34, 0)
-    tx.Size = UDim2.new(1, -40, 1, 0)
-    btn.Activated:Connect(function()
-        SelectTab(name)
-    end)
-    TabButtons[name] = btn
+    table.insert(accentElements, ind)
+    local asset = getIcon(iconName)
+    if asset then
+        -- Larger display size + Fit reduces visible pixelation from 256px sources
+        local img = New("ImageLabel", {
+            Name = "IconImg", Size = UDim2.fromOffset(44, 44), Position = UDim2.fromOffset(8, 5),
+            BackgroundTransparency = 1, Image = asset, ImageColor3 = Theme.SubText,
+            ScaleType = Enum.ScaleType.Fit,
+        }, b)
+    else
+        local fallback = Label(b, "●", 20, Theme.SubText, true)
+        fallback.Name = "IconImg"
+        fallback.Size = UDim2.fromOffset(44, 54)
+        fallback.Position = UDim2.fromOffset(8, 0)
+        fallback.TextXAlignment = Enum.TextXAlignment.Center
+    end
+    local tx = Label(b, name, 13, Theme.SubText, true)
+    tx.Name = "TabText"
+    tx.Position = UDim2.fromOffset(58, 0)
+    tx.Size = UDim2.new(1, -64, 1, 0)
+    b.Activated:Connect(function() selectTab(name) end)
+    TabBtns[name] = b
 end
 
-CreateTab("CharacterLock", "●", 1)
-CreateTab("Whitelist", "◇", 2)
-CreateTab("Settings", "⚙", 3)
-CreateTab("Config", "◆", 4)
+makeTab("Character", "character", 1)
+makeTab("AimParts", "aim_parts", 2)
+makeTab("Whitelist", "filter", 3)
+makeTab("Settings", "console", 4)
+makeTab("Config", "file_config", 5)
 
-local pageCL = CreatePage("CharacterLock")
-local pageWL = CreatePage("Whitelist")
-local pageST = CreatePage("Settings")
-local pageCF = CreatePage("Config")
+local pCL = makePage("Character")
+local pAP = makePage("AimParts")
+local pWL = makePage("Whitelist")
+local pST = makePage("Settings")
+local pCF = makePage("Config")
 
--- Card
-local function Card(parent, title)
-    local frame = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundColor3 = Theme.Panel,
-        BorderSizePixel = 0,
-        ClipsDescendants = false,
+local function Card(parent, title, iconName)
+    local f = New("Frame", {
+        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundColor3 = Theme.Panel, BorderSizePixel = 0, ClipsDescendants = false,
     }, parent)
-    Corner(frame, 8)
-    Stroke(frame, Theme.Stroke)
-    local header = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 34),
-        BackgroundTransparency = 1,
-    }, frame)
-    local t = Label(header, title, 12, Theme.Text, true)
-    t.Position = UDim2.fromOffset(12, 0)
-    t.Size = UDim2.new(1, -24, 1, 0)
-    New("Frame", {
-        Size = UDim2.new(1, -24, 0, 1),
-        Position = UDim2.fromOffset(12, 33),
-        BackgroundColor3 = Theme.Accent,
-        BorderSizePixel = 0,
-    }, header)
+    Corner(f, 8)
+    Stroke(f)
+    local hdr = New("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 1}, f)
+    local asset = iconName and getIcon(iconName)
+    local titleX = 12
+    if asset then
+        -- Slightly larger icons reduce pixelation when scaling 256px assets down
+        local ic = New("ImageLabel", {
+            Size = UDim2.fromOffset(32, 32), Position = UDim2.fromOffset(10, 4),
+            BackgroundTransparency = 1, Image = asset, ImageColor3 = Theme.Accent,
+            ScaleType = Enum.ScaleType.Fit,
+        }, hdr)
+        table.insert(accentElements, ic)
+        titleX = 48
+    end
+    local t = Label(hdr, title, 13, Theme.Text, true)
+    t.Position = UDim2.fromOffset(titleX, 0)
+    t.Size = UDim2.new(1, -titleX - 8, 1, 0)
+    local accentLine = New("Frame", {
+        Size = UDim2.new(1, -24, 0, 1), Position = UDim2.fromOffset(12, 39),
+        BackgroundColor3 = Theme.Accent, BorderSizePixel = 0,
+    }, hdr)
+    table.insert(accentElements, accentLine)
     local body = New("Frame", {
-        Size = UDim2.new(1, -20, 0, 0),
-        Position = UDim2.fromOffset(10, 40),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        ClipsDescendants = false,
-    }, frame)
-    New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, body)
-    New("UIPadding", {PaddingBottom = UDim.new(0, 10)}, body)
+        Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 44),
+        AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ClipsDescendants = false,
+    }, f)
+    New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, body)
+    New("UIPadding", {PaddingBottom = UDim.new(0, 8)}, body)
     return body
 end
 
--- Toggle (switch style)
 local function Toggle(parent, text, getter, setter)
-    local row = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 28),
-        BackgroundTransparency = 1,
-    }, parent)
-    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -50, 1, 0)
-
+    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1}, parent)
+    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -48, 1, 0)
     local btn = New("TextButton", {
-        Size = UDim2.fromOffset(38, 20),
-        Position = UDim2.new(1, -38, 0.5, -10),
-        BackgroundColor3 = Theme.Element,
-        BorderSizePixel = 0,
-        Text = "",
-        AutoButtonColor = false,
+        Size = UDim2.fromOffset(36, 18), Position = UDim2.new(1, -36, 0.5, -9),
+        BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
     }, row)
-    Corner(btn, 10)
-    local circle = New("Frame", {
-        Size = UDim2.fromOffset(14, 14),
-        Position = UDim2.fromOffset(3, 3),
-        BackgroundColor3 = Theme.SubText,
-        BorderSizePixel = 0,
+    Corner(btn, 9)
+    local cir = New("Frame", {
+        Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(3, 3),
+        BackgroundColor3 = Theme.SubText, BorderSizePixel = 0,
     }, btn)
-    Corner(circle, 7)
-
-    local function update()
+    Corner(cir, 6)
+    local function upd()
         local on = getter()
         if on then
             Tween(btn, {BackgroundColor3 = Theme.Accent})
-            Tween(circle, {Position = UDim2.new(1, -17, 0, 3), BackgroundColor3 = Color3.new(1,1,1)})
+            Tween(cir, {Position = UDim2.new(1, -15, 0, 3), BackgroundColor3 = Color3.new(1,1,1)})
         else
             Tween(btn, {BackgroundColor3 = Theme.Element})
-            Tween(circle, {Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.SubText})
+            Tween(cir, {Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.SubText})
         end
     end
-    update()
-    btn.Activated:Connect(function()
-        setter(not getter())
-        update()
-    end)
-    return {Refresh = update}
+    upd()
+    btn.Activated:Connect(function() setter(not getter()); upd() end)
 end
 
--- Slider
-local function Slider(parent, text, min, max, decimals, getter, setter)
-    decimals = decimals or 1
-    local row = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 46),
-        BackgroundTransparency = 1,
-    }, parent)
-    local title = Label(row, text, 12, Theme.Text)
-    title.Size = UDim2.new(1, -60, 0, 18)
-
-    local valueBox = New("TextBox", {
-        Size = UDim2.fromOffset(54, 18),
-        Position = UDim2.new(1, -54, 0, 0),
-        BackgroundColor3 = Theme.Element,
-        TextColor3 = Theme.Text,
-        Text = "",
-        TextSize = 11,
-        Font = Enum.Font.GothamMedium,
-        ClearTextOnFocus = false,
-        BorderSizePixel = 0,
+local function Slider(parent, text, min, max, dec, getter, setter)
+    dec = dec or 1
+    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1}, parent)
+    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -58, 0, 16)
+    local box = New("TextBox", {
+        Size = UDim2.fromOffset(52, 16), Position = UDim2.new(1, -52, 0, 0),
+        BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text, Text = "",
+        TextSize = 11, Font = Enum.Font.GothamMedium, ClearTextOnFocus = false, BorderSizePixel = 0,
     }, row)
-    Corner(valueBox, 4)
-
+    Corner(box, 4)
     local bar = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 5),
-        Position = UDim2.fromOffset(0, 28),
-        BackgroundColor3 = Theme.Element,
-        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 5), Position = UDim2.fromOffset(0, 26),
+        BackgroundColor3 = Theme.Element, BorderSizePixel = 0,
     }, row)
     Corner(bar, 3)
-    local fill = New("Frame", {
-        Size = UDim2.new(0, 0, 1, 0),
-        BackgroundColor3 = Theme.Accent,
-        BorderSizePixel = 0,
-    }, bar)
+    local fill = New("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Accent, BorderSizePixel = 0}, bar)
     Corner(fill, 3)
+    table.insert(accentElements, fill)
     local knob = New("Frame", {
-        Size = UDim2.fromOffset(10, 10),
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.new(0, 0, 0.5, 0),
-        BackgroundColor3 = Theme.Text,
-        BorderSizePixel = 0,
-        ZIndex = 2,
+        Size = UDim2.fromOffset(10, 10), AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0, 0, 0.5, 0), BackgroundColor3 = Theme.Text, BorderSizePixel = 0, ZIndex = 2,
     }, bar)
     Corner(knob, 5)
-
     local function fmt(v)
-        if decimals == 0 then return tostring(math.floor(v + 0.5)) end
-        local m = 10 ^ decimals
-        return string.format("%." .. decimals .. "f", math.floor(v * m + 0.5) / m)
+        if dec == 0 then return tostring(math.floor(v + 0.5)) end
+        return string.format("%." .. dec .. "f", v)
     end
-
-    local function setVisual(v, fire)
+    local function setV(v, fire)
         v = math.clamp(v, min, max)
-        if decimals == 0 then v = math.floor(v + 0.5)
-        else
-            local m = 10 ^ decimals
-            v = math.floor(v * m + 0.5) / m
-        end
+        if dec == 0 then v = math.floor(v + 0.5)
+        else local m = 10 ^ dec; v = math.floor(v * m + 0.5) / m end
         local a = (max == min) and 0 or (v - min) / (max - min)
         fill.Size = UDim2.new(a, 0, 1, 0)
         knob.Position = UDim2.new(a, 0, 0.5, 0)
-        valueBox.Text = fmt(v)
+        box.Text = fmt(v)
         if fire then setter(v) end
     end
-    setVisual(getter(), false)
-
-    local dragging = false
+    setV(getter(), false)
+    local drag = false
     local function fromMouse()
         local mx = UserInputService:GetMouseLocation().X
         local left = bar.AbsolutePosition.X
         local w = math.max(bar.AbsoluteSize.X, 1)
-        local a = math.clamp((mx - left) / w, 0, 1)
-        setVisual(min + (max - min) * a, true)
+        setV(min + (max - min) * math.clamp((mx - left) / w, 0, 1), true)
     end
-    bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            fromMouse()
-        end
+    bar.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = true; fromMouse() end
     end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            fromMouse()
-        end
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and i.UserInputType == Enum.UserInputType.MouseMovement then fromMouse() end
     end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
     end)
-    valueBox.FocusLost:Connect(function()
-        local n = tonumber(valueBox.Text)
-        if n then setVisual(n, true) else setVisual(getter(), false) end
+    box.FocusLost:Connect(function()
+        local n = tonumber(box.Text)
+        if n then setV(n, true) else setV(getter(), false) end
     end)
-    return {Set = function(v) setVisual(v, true) end, Refresh = function() setVisual(getter(), false) end}
 end
 
--- Dropdown (single open, high ZIndex, no clip)
-local OpenDropdown = nil
-
-local function CloseDropdown()
-    if OpenDropdown then
-        OpenDropdown.Visible = false
-        OpenDropdown = nil
-    end
+local OpenList = nil
+local AllLists = {}
+local function closeLists()
+    for _, l in ipairs(AllLists) do l.Visible = false end
+    OpenList = nil
 end
 
 local function Dropdown(parent, text, options, getter, setter)
     local row = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 48),
-        BackgroundTransparency = 1,
-        ZIndex = 20,
-        ClipsDescendants = false,
+        Size = UDim2.new(1, 0, 0, 46), BackgroundTransparency = 1, ZIndex = 20, ClipsDescendants = false,
     }, parent)
-    local title = Label(row, text, 12, Theme.Text)
-    title.Size = UDim2.new(1, 0, 0, 16)
-
+    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, 0, 0, 16)
     local btn = New("TextButton", {
-        Size = UDim2.new(1, 0, 0, 28),
-        Position = UDim2.fromOffset(0, 18),
-        BackgroundColor3 = Theme.Element,
-        Text = "  " .. tostring(getter()),
-        TextColor3 = Theme.Text,
-        TextSize = 11,
-        Font = Enum.Font.GothamMedium,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        AutoButtonColor = false,
-        BorderSizePixel = 0,
-        ZIndex = 21,
-        ClipsDescendants = false,
+        Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 18),
+        BackgroundColor3 = Theme.Element, Text = "  " .. tostring(getter()),
+        TextColor3 = Theme.Text, TextSize = 11, Font = Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 21,
     }, row)
     Corner(btn, 5)
-
-    local listH = math.min(#options * 26, 156)
-    local list = New("ScrollingFrame", {
-        Size = UDim2.new(1, 0, 0, listH),
-        Position = UDim2.new(0, 0, 1, 4),
-        BackgroundColor3 = Theme.Panel2,
-        BorderSizePixel = 0,
-        Visible = false,
-        ZIndex = 200,
-        ScrollBarThickness = 3,
-        ScrollBarImageColor3 = Theme.Accent,
-        CanvasSize = UDim2.new(0, 0, 0, #options * 26),
-        ClipsDescendants = true,
-    }, btn)
+    local listH = math.min(#options * 24, 144)
+    local list = New("Frame", {
+        Size = UDim2.fromOffset(200, listH), BackgroundColor3 = Theme.Panel2,
+        BorderSizePixel = 0, Visible = false, ZIndex = 300, ClipsDescendants = true,
+    }, ScreenGui)
     Corner(list, 5)
-    Stroke(list, Theme.Stroke)
+    Stroke(list)
     New("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, list)
-
+    table.insert(AllLists, list)
+    local function place()
+        local ap, as = btn.AbsolutePosition, btn.AbsoluteSize
+        list.Size = UDim2.fromOffset(math.max(as.X, 160), listH)
+        local vy = camera.ViewportSize.Y
+        local y = ap.Y + as.Y + 4
+        if y + listH > vy then y = ap.Y - listH - 4 end
+        list.Position = UDim2.fromOffset(ap.X, math.clamp(y, 0, math.max(0, vy - listH)))
+    end
     for i, opt in ipairs(options) do
         local o = New("TextButton", {
-            Size = UDim2.new(1, 0, 0, 26),
-            BackgroundTransparency = 1,
-            Text = "  " .. tostring(opt),
-            TextColor3 = Theme.Text,
-            TextSize = 11,
-            Font = Enum.Font.Gotham,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            AutoButtonColor = false,
-            BorderSizePixel = 0,
-            LayoutOrder = i,
-            ZIndex = 201,
+            Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1,
+            Text = "  " .. tostring(opt), TextColor3 = Theme.Text, TextSize = 11,
+            Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
+            AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i, ZIndex = 301,
         }, list)
         o.Activated:Connect(function()
             setter(opt)
             btn.Text = "  " .. tostring(getter())
-            CloseDropdown()
+            closeLists()
         end)
-        o.MouseEnter:Connect(function()
-            o.BackgroundTransparency = 0
-            o.BackgroundColor3 = Theme.Element
-        end)
-        o.MouseLeave:Connect(function()
-            o.BackgroundTransparency = 1
-        end)
+        o.MouseEnter:Connect(function() o.BackgroundTransparency = 0; o.BackgroundColor3 = Theme.Element end)
+        o.MouseLeave:Connect(function() o.BackgroundTransparency = 1 end)
     end
-
     btn.Activated:Connect(function()
-        if list.Visible then
-            CloseDropdown()
-        else
-            CloseDropdown()
-            list.Visible = true
-            OpenDropdown = list
-        end
+        if list.Visible then closeLists()
+        else closeLists(); place(); list.Visible = true; OpenList = list end
     end)
-
-    return {
-        Refresh = function()
-            btn.Text = "  " .. tostring(getter())
-        end
-    }
 end
 
--- Keybind
-local BindingBtn = nil
-local function KeyName(k)
-    if not k or k == Enum.KeyCode.Unknown then return "None" end
-    return k.Name
-end
-
+local Binding = nil
+local AllBinds = {}
 local function Bind(parent, text, getter, setter)
-    local row = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 32),
-        BackgroundTransparency = 1,
-        ZIndex = 30,
-    }, parent)
+    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, ZIndex = 30}, parent)
     Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -100, 1, 0)
-
     local btn = New("TextButton", {
-        Size = UDim2.fromOffset(95, 26),
-        Position = UDim2.new(1, -95, 0.5, -13),
-        BackgroundColor3 = Theme.Element,
-        Text = KeyName(getter()),
-        TextColor3 = Theme.Text,
-        TextSize = 11,
-        Font = Enum.Font.GothamMedium,
-        AutoButtonColor = false,
-        BorderSizePixel = 0,
-        ZIndex = 31,
+        Size = UDim2.fromOffset(92, 24), Position = UDim2.new(1, -92, 0.5, -12),
+        BackgroundColor3 = Theme.Element, Text = getter().Name, TextColor3 = Theme.Text,
+        TextSize = 11, Font = Enum.Font.GothamMedium, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 31,
     }, row)
     Corner(btn, 5)
-
     btn.Activated:Connect(function()
-        if BindingBtn == btn then
-            BindingBtn = nil
-            btn.Text = KeyName(getter())
-            btn.TextColor3 = Theme.Text
-        else
-            BindingBtn = btn
-            btn.Text = "..."
-            btn.TextColor3 = Theme.Accent
-        end
+        if Binding == btn then Binding = nil; btn.Text = getter().Name; btn.TextColor3 = Theme.Text
+        else Binding = btn; btn.Text = "..."; btn.TextColor3 = Theme.Accent end
     end)
-
-    return {
-        Refresh = function()
-            if BindingBtn ~= btn then
-                btn.Text = KeyName(getter())
-                btn.TextColor3 = Theme.Text
-            end
-        end,
-        _btn = btn,
-        _getter = getter,
-        _setter = setter,
-    }
+    table.insert(AllBinds, {btn = btn, getter = getter, setter = setter})
 end
 
--- Track binds for input handler
-local AllBinds = {}
+local AIM_OPTS = {"Root", "Head", "AboveHead", "Torso", "Chest", "Body", "Front", "Back", "Left", "Right", "LeftArm", "RightArm"}
 
--- =====================================================
--- CHARACTER LOCK
--- =====================================================
-local cMethods = Card(pageCL.left, "Methods")
-Dropdown(cMethods, "Rotate Method",
+-- ===== CharacterLock =====
+local cM = Card(pCL.L, "Methods", "methods")
+Dropdown(cM, "Rotate Method",
     {"CFrame", "Align", "Align2", "BodyGyro", "AngularVel", "Torque", "Motor6D", "Assembly"},
-    function() return Config.RotateMode end,
-    function(v) Config.RotateMode = v end)
+    function() return Config.RotateMode end, function(v) Config.RotateMode = v end)
 
-local cDead = Card(pageCL.left, "Deadzone")
-Slider(cDead, "Deadzone (deg)", 0, 180, 0,
-    function() return Config.TurnDeadzoneDegrees end,
-    function(v) Config.TurnDeadzoneDegrees = v end)
-Toggle(cDead, "Zero While Holding",
-    function() return Config.ZeroDeadzoneWhenHolding end,
-    function(v) Config.ZeroDeadzoneWhenHolding = v end)
+local cD = Card(pCL.L, "Deadzone", "deadzone")
+Slider(cD, "Deadzone (deg)", 0, 180, 0, function() return Config.TurnDeadzoneDegrees end, function(v) Config.TurnDeadzoneDegrees = v end)
+Toggle(cD, "Zero While Holding", function() return Config.ZeroDeadzoneWhenHolding end, function(v) Config.ZeroDeadzoneWhenHolding = v end)
 
-local cPred = Card(pageCL.left, "Prediction")
-Toggle(cPred, "Enabled",
-    function() return Config.UsePrediction end,
-    function(v) Config.UsePrediction = v end)
-Slider(cPred, "Strength", 0, 1, 3,
-    function() return Config.PredictionStrength end,
-    function(v) Config.PredictionStrength = v end)
-Slider(cPred, "Max Speed", 1, 300, 0,
-    function() return Config.PredictionMaxSpeed end,
-    function(v) Config.PredictionMaxSpeed = v end)
-Slider(cPred, "History Smooth", 1, 60, 0,
-    function() return Config.PredictionHistorySmoothing end,
-    function(v) Config.PredictionHistorySmoothing = v end)
+local cP = Card(pCL.L, "Prediction", "prediction")
+Toggle(cP, "Enabled", function() return Config.UsePrediction end, function(v) Config.UsePrediction = v end)
+Slider(cP, "Strength", 0, 1, 3, function() return Config.PredictionStrength end, function(v) Config.PredictionStrength = v end)
+Slider(cP, "Max Speed", 1, 300, 0, function() return Config.PredictionMaxSpeed end, function(v) Config.PredictionMaxSpeed = v end)
+Slider(cP, "History Smooth", 1, 60, 0, function() return Config.PredictionHistorySmoothing end, function(v) Config.PredictionHistorySmoothing = v end)
 
-local cAim = Card(pageCL.left, "Aim Part")
-Dropdown(cAim, "Aim Part",
-    {"Root", "Head", "AboveHead", "Torso", "Chest", "Body", "Front", "Back", "Left", "Right", "LeftArm", "RightArm"},
+local cS = Card(pCL.R, "Smooth", "smooth")
+Slider(cS, "Aim Smooth", 0, 0.99, 2, function() return Config.AimSmooth end, function(v) Config.AimSmooth = v end)
+Toggle(cS, "Smooth Turn", function() return Config.UseSmoothTurn end, function(v) Config.UseSmoothTurn = v end)
+Slider(cS, "Turn Time", 0.01, 1, 3, function() return Config.Smoothness end, function(v) Config.Smoothness = v end)
+
+local cDe = Card(pCL.R, "Delay / Behind", "delay")
+Slider(cDe, "Behind Hold Delay", 0, 2, 2, function() return Config.BehindHoldDelay end, function(v) Config.BehindHoldDelay = v end)
+Slider(cDe, "Behind Distance", 0, 20, 1, function() return Config.BehindDistance end, function(v) Config.BehindDistance = v end)
+Slider(cDe, "Behind Smooth", 0, 0.5, 3, function() return Config.BehindSmoothTime end, function(v) Config.BehindSmoothTime = v end)
+Toggle(cDe, "Enable Teleport", function() return Config.EnableTeleport end, function(v) Config.EnableTeleport = v end)
+
+local cR = Card(pCL.R, "Retargets", "crosshair")
+Toggle(cR, "Block Retarget", function() return Config.BlockRetargetClosest end, function(v) Config.BlockRetargetClosest = v end)
+Toggle(cR, "Skill Retarget", function() return Config.SkillRetargetClosest end, function(v) Config.SkillRetargetClosest = v end)
+Toggle(cR, "Mouse Retarget", function() return Config.MouseRetargetClosest end, function(v) Config.MouseRetargetClosest = v end)
+Slider(cR, "Scan Interval", 0, 1, 3, function() return Config.UltraScanInterval end, function(v) Config.UltraScanInterval = v end)
+
+local cDi = Card(pCL.R, "Distance", "distance")
+Slider(cDi, "Min Lock Distance", 0, 100, 0, function() return Config.MinLockDistance end, function(v) Config.MinLockDistance = v end)
+Slider(cDi, "Max Lock Distance", 10, 1000, 0, function() return Config.MaxLockDistance end, function(v) Config.MaxLockDistance = v end)
+
+local cV = Card(pCL.L, "Validation", "shield")
+Toggle(cV, "Strong Validation", function() return Config.StrongValidation end, function(v) Config.StrongValidation = v end)
+Toggle(cV, "Instant Behind Snap", function() return Config.InstantBehindSnap end, function(v) Config.InstantBehindSnap = v end)
+Toggle(cV, "Ignore Active Counter", function() return Config.IgnoreActiveCounter end, function(v) Config.IgnoreActiveCounter = v end)
+
+-- ===== Aim Parts =====
+local function aimCard(col, source, title, icon, keyGet, keySet)
+    local c = Card(col, title, icon)
+    if keyGet and keySet then
+        Bind(c, "Key", keyGet, keySet)
+    end
+    Dropdown(c, "Aim Part", AIM_OPTS,
+        function() return Config.AimPointBySource[source] or "Root" end,
+        function(v) Config.AimPointBySource[source] = v end)
+    Slider(c, "Offset", -10, 10, 2,
+        function() return Config.AimOffsetBySource[source] or 0 end,
+        function(v) Config.AimOffsetBySource[source] = v end)
+end
+
+aimCard(pAP.L, "block", "Block", "block",
+    function() return Config.BlockKey or Enum.KeyCode.F end,
+    function(v) Config.BlockKey = v end)
+aimCard(pAP.L, "skill", "Skill", "aimpart", nil, nil)
+aimCard(pAP.L, "mouse", "M1 (Mouse)", "mouse", nil, nil)
+aimCard(pAP.R, "q", "Behind", "behind",
+    function() return Config.BehindKey end,
+    function(v) Config.BehindKey = v end)
+aimCard(pAP.R, "priority", "Priority", "priority",
+    function() return Config.PriorityKey end,
+    function(v) Config.PriorityKey = v end)
+aimCard(pAP.R, "sticky", "Sticky", "always",
+    function() return Config.StickyLockKey end,
+    function(v) Config.StickyLockKey = v end)
+
+local cDef = Card(pAP.R, "Default / Above Head", "body_parts")
+Dropdown(cDef, "Default Aim Part", AIM_OPTS,
     function() return Config.AimPointBySource.default end,
-    function(v)
-        Config.AimPointBySource.default = v
-        Config.AimPointBySource.sticky = v
-        Config.AimPointBySource.priority = v
-    end)
-Slider(cAim, "Aim Offset", -10, 10, 2,
+    function(v) Config.AimPointBySource.default = v end)
+Slider(cDef, "Default Offset", -10, 10, 2,
     function() return Config.AimOffsetBySource.default end,
-    function(v)
-        Config.AimOffsetBySource.default = v
-        Config.AimOffsetBySource.sticky = v
-        Config.AimOffsetBySource.priority = v
-    end)
-Slider(cAim, "Above Head Height", 0, 5, 2,
+    function(v) Config.AimOffsetBySource.default = v end)
+Slider(cDef, "Above Head Height", 0, 5, 2,
     function() return Config.AboveHeadHeight end,
     function(v) Config.AboveHeadHeight = v end)
 
-local cSmooth = Card(pageCL.right, "Smooth")
-Slider(cSmooth, "Aim Smooth", 0, 0.99, 2,
-    function() return Config.AimSmooth end,
-    function(v) Config.AimSmooth = v end)
-Toggle(cSmooth, "Smooth Turn",
-    function() return Config.UseSmoothTurn end,
-    function(v) Config.UseSmoothTurn = v end)
-Slider(cSmooth, "Turn Time", 0.01, 1, 3,
-    function() return Config.Smoothness end,
-    function(v) Config.Smoothness = v end)
-
-local cDelay = Card(pageCL.right, "Delay / Behind")
-Slider(cDelay, "Behind Hold Delay", 0, 2, 2,
-    function() return Config.BehindHoldDelay end,
-    function(v) Config.BehindHoldDelay = v end)
-Slider(cDelay, "Behind Distance", 0, 20, 1,
-    function() return Config.BehindDistance end,
-    function(v) Config.BehindDistance = v end)
-Slider(cDelay, "Behind Smooth", 0, 0.5, 3,
-    function() return Config.BehindSmoothTime end,
-    function(v) Config.BehindSmoothTime = v end)
-Toggle(cDelay, "Enable Teleport",
-    function() return Config.EnableTeleport end,
-    function(v) Config.EnableTeleport = v end)
-
-local cRet = Card(pageCL.right, "Retargets")
-Toggle(cRet, "Block Retarget",
-    function() return Config.BlockRetargetClosest end,
-    function(v) Config.BlockRetargetClosest = v end)
-Toggle(cRet, "Skill Retarget",
-    function() return Config.SkillRetargetClosest end,
-    function(v) Config.SkillRetargetClosest = v end)
-Toggle(cRet, "Mouse Retarget",
-    function() return Config.MouseRetargetClosest end,
-    function(v) Config.MouseRetargetClosest = v end)
-Slider(cRet, "Scan Interval", 0, 1, 3,
-    function() return Config.UltraScanInterval end,
-    function(v) Config.UltraScanInterval = v end)
-
-local cDist = Card(pageCL.right, "Distance")
-Slider(cDist, "Min Lock Distance", 0, 100, 0,
-    function() return Config.MinLockDistance end,
-    function(v) Config.MinLockDistance = v end)
-Slider(cDist, "Max Lock Distance", 10, 1000, 0,
-    function() return Config.MaxLockDistance end,
-    function(v) Config.MaxLockDistance = v end)
-
-local cVal = Card(pageCL.right, "Validation")
-Toggle(cVal, "Strong Validation",
-    function() return Config.StrongValidation end,
-    function(v) Config.StrongValidation = v end)
-Toggle(cVal, "Instant Behind Snap",
-    function() return Config.InstantBehindSnap end,
-    function(v) Config.InstantBehindSnap = v end)
-Toggle(cVal, "Ignore Active Counter",
-    function() return Config.IgnoreActiveCounter end,
-    function(v) Config.IgnoreActiveCounter = v end)
-
--- =====================================================
--- WHITELIST
--- =====================================================
-local cAlly = Card(pageWL.left, "Ally Filter")
-Toggle(cAlly, "Whitelist Allies",
-    function() return Config.IgnoreAllies.Enabled end,
-    function(v) Config.IgnoreAllies.Enabled = v; rebuildAllyCache() end)
-Dropdown(cAlly, "Mode",
-    {"UserId", "Name"},
+-- ===== Whitelist =====
+local cAlly = Card(pWL.L, "Ally Filter", "eye")
+Toggle(cAlly, "Whitelist Allies", function() return Config.IgnoreAllies.Enabled end, function(v) Config.IgnoreAllies.Enabled = v; rebuildAllyCache() end)
+Dropdown(cAlly, "Mode", {"UserId", "Name"},
     function() return Config.IgnoreAllies.UseUserId and "UserId" or "Name" end,
     function(v) Config.IgnoreAllies.UseUserId = (v == "UserId"); rebuildAllyCache() end)
 
-local cPl = Card(pageWL.right, "Players in Server")
+local cPl = Card(pWL.R, "Players in Server", "contacts")
 local plScroll = New("ScrollingFrame", {
-    Size = UDim2.new(1, 0, 0, 300),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    ScrollBarImageColor3 = Theme.Accent,
-    CanvasSize = UDim2.new(0, 0, 0, 0),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    Size = UDim2.new(1, 0, 0, 280), BackgroundTransparency = 1, BorderSizePixel = 0,
+    ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.Accent,
+    CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
 }, cPl)
 New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.Name}, plScroll)
 
-local function isWhitelisted(plr)
+local function isWL(plr)
     if Config.IgnoreAllies.UseUserId then
-        for _, id in ipairs(Config.IgnoreAllies.UserIds) do
-            if tonumber(id) == plr.UserId then return true end
-        end
+        for _, id in ipairs(Config.IgnoreAllies.UserIds) do if tonumber(id) == plr.UserId then return true end end
     else
         local w = string.lower(plr.Name)
-        for _, name in ipairs(Config.IgnoreAllies.Names) do
-            if string.lower(tostring(name)) == w then return true end
-        end
+        for _, n in ipairs(Config.IgnoreAllies.Names) do if string.lower(tostring(n)) == w then return true end end
     end
     return false
 end
-
-local function setWhitelisted(plr, value)
+local function setWL(plr, val)
     if Config.IgnoreAllies.UseUserId then
         local ids = Config.IgnoreAllies.UserIds
-        for i = #ids, 1, -1 do
-            if tonumber(ids[i]) == plr.UserId then table.remove(ids, i) end
-        end
-        if value then table.insert(ids, plr.UserId) end
+        for i = #ids, 1, -1 do if tonumber(ids[i]) == plr.UserId then table.remove(ids, i) end end
+        if val then table.insert(ids, plr.UserId) end
     else
         local names = Config.IgnoreAllies.Names
-        for i = #names, 1, -1 do
-            if string.lower(tostring(names[i])) == string.lower(plr.Name) then table.remove(names, i) end
-        end
-        if value then table.insert(names, plr.Name) end
+        for i = #names, 1, -1 do if string.lower(tostring(names[i])) == string.lower(plr.Name) then table.remove(names, i) end end
+        if val then table.insert(names, plr.Name) end
     end
     rebuildAllyCache()
 end
-
-local function rebuildPlayerList()
-    for _, c in ipairs(plScroll:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
+local function rebuildPL()
+    for _, c in ipairs(plScroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player then
-            local on = isWhitelisted(plr)
+            local on = isWL(plr)
             local b = New("TextButton", {
-                Size = UDim2.new(1, -4, 0, 28),
-                BackgroundColor3 = on and Color3.fromRGB(40, 70, 50) or Theme.Element,
-                BorderSizePixel = 0,
-                Text = "  " .. plr.Name .. (on and "  ✓" or ""),
-                TextColor3 = Theme.Text,
-                TextSize = 12,
-                Font = Enum.Font.GothamMedium,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                AutoButtonColor = false,
+                Size = UDim2.new(1, -4, 0, 26), BackgroundColor3 = on and Color3.fromRGB(40, 70, 50) or Theme.Element,
+                BorderSizePixel = 0, Text = "  " .. plr.Name .. (on and "  ✓" or ""),
+                TextColor3 = Theme.Text, TextSize = 11, Font = Enum.Font.GothamMedium,
+                TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false,
             }, plScroll)
             Corner(b, 5)
             b.Activated:Connect(function()
-                setWhitelisted(plr, not isWhitelisted(plr))
-                local now = isWhitelisted(plr)
+                setWL(plr, not isWL(plr))
+                local now = isWL(plr)
                 b.BackgroundColor3 = now and Color3.fromRGB(40, 70, 50) or Theme.Element
                 b.Text = "  " .. plr.Name .. (now and "  ✓" or "")
             end)
         end
     end
 end
-rebuildPlayerList()
-Players.PlayerAdded:Connect(rebuildPlayerList)
-Players.PlayerRemoving:Connect(rebuildPlayerList)
+rebuildPL()
+Players.PlayerAdded:Connect(rebuildPL)
+Players.PlayerRemoving:Connect(rebuildPL)
 
-local clearBtn = New("TextButton", {
-    Size = UDim2.new(1, 0, 0, 28),
-    BackgroundColor3 = Theme.Element,
-    BorderSizePixel = 0,
-    Text = "Clear Whitelist",
-    TextColor3 = Theme.Text,
-    TextSize = 12,
-    Font = Enum.Font.GothamMedium,
-    AutoButtonColor = false,
-}, cPl)
-Corner(clearBtn, 5)
-clearBtn.Activated:Connect(function()
-    table.clear(Config.IgnoreAllies.UserIds)
-    table.clear(Config.IgnoreAllies.Names)
-    rebuildAllyCache()
-    rebuildPlayerList()
-end)
+-- ===== Settings =====
+local cPrio = Card(pST.L, "Target Priority", "target")
+Dropdown(cPrio, "Priority", {"Players", "NPC", "Closest"},
+    function() return Config.TargetPriority end, function(v) Config.TargetPriority = v end)
 
--- =====================================================
--- SETTINGS
--- =====================================================
-local cPrio = Card(pageST.left, "Target Priority")
-Dropdown(cPrio, "Priority",
-    {"Players", "NPC", "Closest"},
-    function() return Config.TargetPriority end,
-    function(v) Config.TargetPriority = v end)
+local cKeys = Card(pST.L, "Hotkeys", "keyboard")
+Bind(cKeys, "Menu Key", function() return Config.ToggleKey end, function(v) Config.ToggleKey = v end)
+Bind(cKeys, "Enable Lock Key", function() return Config.EnableLockKey end, function(v) Config.EnableLockKey = v end)
+Bind(cKeys, "Panic Key", function() return Config.PanicKey end, function(v) Config.PanicKey = v end)
+Bind(cKeys, "Sticky Key", function() return Config.StickyLockKey end, function(v) Config.StickyLockKey = v end)
+Bind(cKeys, "Behind Key", function() return Config.BehindKey end, function(v) Config.BehindKey = v end)
+Bind(cKeys, "Priority Key", function() return Config.PriorityKey end, function(v) Config.PriorityKey = v end)
 
-local cKeys = Card(pageST.left, "Hotkeys")
-local b1 = Bind(cKeys, "Menu Key", function() return Config.ToggleKey end, function(v) Config.ToggleKey = v end)
-local b2 = Bind(cKeys, "Enable Lock Key", function() return Config.EnableLockKey end, function(v) Config.EnableLockKey = v end)
-local b3 = Bind(cKeys, "Sticky Key", function() return Config.StickyLockKey end, function(v) Config.StickyLockKey = v end)
-local b4 = Bind(cKeys, "Behind Key", function() return Config.BehindKey end, function(v) Config.BehindKey = v end)
-local b5 = Bind(cKeys, "Priority Key", function() return Config.PriorityKey end, function(v) Config.PriorityKey = v end)
-table.insert(AllBinds, b1); table.insert(AllBinds, b2); table.insert(AllBinds, b3); table.insert(AllBinds, b4); table.insert(AllBinds, b5)
+local cTime = Card(pST.R, "Lock Timing", "hourglass")
+Slider(cTime, "Hold Threshold (skill key)", 0, 4, 2, function() return Config.HoldThreshold end, function(v) Config.HoldThreshold = v end)
+Slider(cTime, "Click Duration (skill)", 0, 4, 2, function() return Config.ClickLockDuration end, function(v) Config.ClickLockDuration = v end)
+Slider(cTime, "Hold Threshold (mouse)", 0, 4, 2, function() return Config.MouseHoldThreshold end, function(v) Config.MouseHoldThreshold = v end)
+Slider(cTime, "Click Duration (mouse)", 0, 4, 2, function() return Config.MouseClickLockDuration end, function(v) Config.MouseClickLockDuration = v end)
+Toggle(cTime, "Use Mouse Button 1", function() return Config.UseMouseButton1 end, function(v) Config.UseMouseButton1 = v end)
 
-local cTiming = Card(pageST.right, "Lock Timing")
-Slider(cTiming, "Hold Threshold", 0, 1, 2,
-    function() return Config.HoldThreshold end,
-    function(v) Config.HoldThreshold = v end)
-Slider(cTiming, "Click Lock Duration", 0, 2, 2,
-    function() return Config.ClickLockDuration end,
-    function(v) Config.ClickLockDuration = v end)
-Slider(cTiming, "Mouse Hold Threshold", 0, 1, 2,
-    function() return Config.MouseHoldThreshold end,
-    function(v) Config.MouseHoldThreshold = v end)
-Slider(cTiming, "Mouse Click Duration", 0, 2, 2,
-    function() return Config.MouseClickLockDuration end,
-    function(v) Config.MouseClickLockDuration = v end)
-Toggle(cTiming, "Use Mouse Button 1",
-    function() return Config.UseMouseButton1 end,
-    function(v) Config.UseMouseButton1 = v end)
-
-local cLK = Card(pageST.right, "Lock Keys")
-local keyRow = New("Frame", {
-    Size = UDim2.new(1, 0, 0, 30),
-    BackgroundTransparency = 1,
-}, cLK)
-New("UIListLayout", {
-    FillDirection = Enum.FillDirection.Horizontal,
-    Padding = UDim.new(0, 5),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, keyRow)
-
-local commonKeys = {
-    {Enum.KeyCode.One, "1"}, {Enum.KeyCode.Two, "2"}, {Enum.KeyCode.Three, "3"},
-    {Enum.KeyCode.Four, "4"}, {Enum.KeyCode.F, "F"}, {Enum.KeyCode.E, "E"},
-    {Enum.KeyCode.R, "R"}, {Enum.KeyCode.G, "G"},
-}
-local function isKeyIn(key)
-    for _, k in ipairs(Config.LockKeys) do if k == key then return true end end
-    return false
+local cLK = Card(pST.R, "Lock Keys", "bind")
+local keyRow = New("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1}, cLK)
+New("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder}, keyRow)
+local commons = {{Enum.KeyCode.One,"1"},{Enum.KeyCode.Two,"2"},{Enum.KeyCode.Three,"3"},{Enum.KeyCode.Four,"4"},{Enum.KeyCode.F,"F"},{Enum.KeyCode.E,"E"},{Enum.KeyCode.R,"R"},{Enum.KeyCode.G,"G"}}
+local function inLK(k) for _, x in ipairs(Config.LockKeys) do if x == k then return true end end return false end
+local function togLK(k)
+    for i, x in ipairs(Config.LockKeys) do if x == k then table.remove(Config.LockKeys, i) return end end
+    table.insert(Config.LockKeys, k)
 end
-local function toggleKey(key)
-    for i, k in ipairs(Config.LockKeys) do
-        if k == key then table.remove(Config.LockKeys, i) return end
-    end
-    table.insert(Config.LockKeys, key)
-end
-for i, e in ipairs(commonKeys) do
-    local key, name = e[1], e[2]
-    local btn = New("TextButton", {
-        Size = UDim2.fromOffset(34, 26),
-        BackgroundColor3 = isKeyIn(key) and Theme.Accent or Theme.Element,
-        BorderSizePixel = 0,
-        Text = name,
-        TextColor3 = Theme.Text,
-        TextSize = 12,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-        LayoutOrder = i,
+for i, e in ipairs(commons) do
+    local k, n = e[1], e[2]
+    local b = New("TextButton", {
+        Size = UDim2.fromOffset(32, 24), BackgroundColor3 = inLK(k) and Theme.Accent or Theme.Element,
+        BorderSizePixel = 0, Text = n, TextColor3 = Theme.Text, TextSize = 11,
+        Font = Enum.Font.GothamBold, AutoButtonColor = false, LayoutOrder = i,
     }, keyRow)
-    Corner(btn, 5)
-    btn.Activated:Connect(function()
-        toggleKey(key)
-        btn.BackgroundColor3 = isKeyIn(key) and Theme.Accent or Theme.Element
-    end)
+    Corner(b, 5)
+    b.Activated:Connect(function() togLK(k); b.BackgroundColor3 = inLK(k) and Theme.Accent or Theme.Element end)
 end
 
-local cMenu = Card(pageST.left, "Menu Theme")
-Dropdown(cMenu, "Theme",
-    {"Red", "Purple", "Blue"},
-    function() return CurrentThemeName end,
-    function(v)
-        if Themes[v] then
-            CurrentThemeName = v
-            -- partial live update of accents
-            Theme = Themes[v]
-            TopLine.BackgroundColor3 = Theme.Accent
-            for _, p in pairs(Pages) do
-                p.page.ScrollBarImageColor3 = Theme.Accent
-            end
-            for _, btn in pairs(TabButtons) do
-                local ind = btn:FindFirstChild("Indicator")
-                if ind then ind.BackgroundColor3 = Theme.Accent end
-            end
-        end
-    end)
+local cPanic = Card(pST.L, "Panic", "panic")
+local panicInfo = Label(cPanic, "Panic Key destroys the GUI and fully disables the lock until you re-execute the script.", 11, Theme.SubText)
+panicInfo.Size = UDim2.new(1, 0, 0, 40)
+panicInfo.TextWrapped = true
+panicInfo.TextYAlignment = Enum.TextYAlignment.Top
 
--- =====================================================
--- CONFIG SAVE / LOAD
--- =====================================================
-local SAVE_FOLDER = "TurboConfigs"
-local SAVE_FILE = "TurboConfigs/default.json"
 
-local function keyToStr(k)
-    if typeof(k) == "EnumItem" then return k.Name end
-    return tostring(k)
-end
-local function strToKey(s)
-    local ok, k = pcall(function() return Enum.KeyCode[s] end)
-    if ok and k then return k end
-    return Enum.KeyCode.Unknown
-end
+-- ===== Accent Color =====
+local accentWatchers = {} -- functions to recolor UI when accent changes
+local function registerAccent(fn) table.insert(accentWatchers, fn) end
 
-local function serializeConfig()
-    local lockKeyNames = {}
-    for _, k in ipairs(Config.LockKeys) do
-        table.insert(lockKeyNames, keyToStr(k))
+local function applyAccent(c)
+    if typeof(c) ~= "Color3" then return end
+    Theme.Accent = c
+    -- header line
+    if TopLine then TopLine.BackgroundColor3 = c end
+    if Title then Title.TextColor3 = c end
+    -- status uses green/red separately
+    -- tabs indicator + active icons refreshed via selectTab
+    if currentTab then selectTab(currentTab) end
+    -- scrollbars
+    for _, p in pairs(Pages) do
+        if p.sc then p.sc.ScrollBarImageColor3 = c end
     end
+    for _, el in ipairs(accentElements) do
+        if el and el.Parent then
+            pcall(function()
+                if el:IsA("ImageLabel") then
+                    el.ImageColor3 = c
+                else
+                    el.BackgroundColor3 = c
+                end
+            end)
+        end
+    end
+    for _, fn in ipairs(accentWatchers) do
+        pcall(fn, c)
+    end
+end
+
+local function ColorPicker(parent, text, getter, setter)
+    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1}, parent)
+    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -120, 1, 0)
+    local swatch = New("TextButton", {
+        Size = UDim2.fromOffset(28, 20), Position = UDim2.new(1, -112, 0.5, -10),
+        BackgroundColor3 = getter(), BorderSizePixel = 0, Text = "", AutoButtonColor = false,
+    }, row)
+    Corner(swatch, 4)
+    Stroke(swatch, Theme.Stroke, 1)
+    local hex = New("TextBox", {
+        Size = UDim2.fromOffset(78, 20), Position = UDim2.new(1, -78, 0.5, -10),
+        BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text, TextSize = 10,
+        Font = Enum.Font.GothamMedium, ClearTextOnFocus = false, BorderSizePixel = 0,
+        Text = string.format("%02X%02X%02X",
+            math.floor(getter().R*255+0.5), math.floor(getter().G*255+0.5), math.floor(getter().B*255+0.5)),
+    }, row)
+    Corner(hex, 4)
+    local presets = {
+        Color3.fromRGB(220, 55, 70),   -- red
+        Color3.fromRGB(90, 120, 255),  -- blue
+        Color3.fromRGB(160, 80, 255),  -- purple
+        Color3.fromRGB(70, 200, 120),  -- green
+        Color3.fromRGB(255, 160, 40),  -- orange
+        Color3.fromRGB(0, 200, 220),   -- cyan
+        Color3.fromRGB(255, 80, 160),  -- pink
+        Color3.fromRGB(240, 240, 245), -- white
+    }
+    local pop = New("Frame", {
+        Size = UDim2.fromOffset(168, 70), BackgroundColor3 = Theme.Panel2,
+        BorderSizePixel = 0, Visible = false, ZIndex = 320,
+    }, ScreenGui)
+    Corner(pop, 6)
+    Stroke(pop)
+    New("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Left,
+        VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4),
+        SortOrder = Enum.SortOrder.LayoutOrder, Wraps = true,
+    }, pop)
+    New("UIPadding", {PaddingLeft = UDim.new(0, 6), PaddingTop = UDim.new(0, 6), PaddingRight = UDim.new(0, 6)}, pop)
+    table.insert(AllLists, pop)
+    local function setColor(c)
+        setter(c)
+        swatch.BackgroundColor3 = c
+        hex.Text = string.format("%02X%02X%02X",
+            math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), math.floor(c.B*255+0.5))
+        applyAccent(c)
+        pop.Visible = false
+    end
+    for i, pc in ipairs(presets) do
+        local b = New("TextButton", {
+            Size = UDim2.fromOffset(18, 18), BackgroundColor3 = pc, BorderSizePixel = 0,
+            Text = "", AutoButtonColor = false, LayoutOrder = i, ZIndex = 321,
+        }, pop)
+        Corner(b, 4)
+        b.Activated:Connect(function() setColor(pc) end)
+    end
+    swatch.Activated:Connect(function()
+        if pop.Visible then pop.Visible = false; return end
+        closeLists()
+        local ap = swatch.AbsolutePosition
+        pop.Position = UDim2.fromOffset(ap.X - 40, ap.Y + 24)
+        pop.Visible = true
+        OpenList = pop
+    end)
+    hex.FocusLost:Connect(function()
+        local t = hex.Text:gsub("#", "")
+        if #t == 6 then
+            local r = tonumber(t:sub(1,2), 16)
+            local g = tonumber(t:sub(3,4), 16)
+            local b = tonumber(t:sub(5,6), 16)
+            if r and g and b then setColor(Color3.fromRGB(r,g,b)) end
+        end
+        hex.Text = string.format("%02X%02X%02X",
+            math.floor(getter().R*255+0.5), math.floor(getter().G*255+0.5), math.floor(getter().B*255+0.5))
+    end)
+    registerAccent(function(c)
+        swatch.BackgroundColor3 = c
+    end)
+end
+
+local cTheme = Card(pST.R, "Appearance", "dashboard")
+ColorPicker(cTheme, "Accent Color", function() return Theme.Accent end, function(v) Theme.Accent = v end)
+
+
+-- ===== Config Save/Load =====
+local function ser()
+    local keys = {}
+    for _, k in ipairs(Config.LockKeys) do table.insert(keys, k.Name) end
     return {
-        RotateMode = Config.RotateMode,
-        TurnDeadzoneDegrees = Config.TurnDeadzoneDegrees,
-        ZeroDeadzoneWhenHolding = Config.ZeroDeadzoneWhenHolding,
-        UsePrediction = Config.UsePrediction,
-        PredictionStrength = Config.PredictionStrength,
-        PredictionMaxSpeed = Config.PredictionMaxSpeed,
+        RotateMode = Config.RotateMode, TurnDeadzoneDegrees = Config.TurnDeadzoneDegrees,
+        ZeroDeadzoneWhenHolding = Config.ZeroDeadzoneWhenHolding, UsePrediction = Config.UsePrediction,
+        PredictionStrength = Config.PredictionStrength, PredictionMaxSpeed = Config.PredictionMaxSpeed,
         PredictionHistorySmoothing = Config.PredictionHistorySmoothing,
-        AimPointDefault = Config.AimPointBySource.default,
-        AimOffsetDefault = Config.AimOffsetBySource.default,
-        AboveHeadHeight = Config.AboveHeadHeight,
-        AimSmooth = Config.AimSmooth,
-        UseSmoothTurn = Config.UseSmoothTurn,
-        Smoothness = Config.Smoothness,
-        BehindHoldDelay = Config.BehindHoldDelay,
-        BehindDistance = Config.BehindDistance,
-        BehindSmoothTime = Config.BehindSmoothTime,
-        EnableTeleport = Config.EnableTeleport,
-        BlockRetargetClosest = Config.BlockRetargetClosest,
-        SkillRetargetClosest = Config.SkillRetargetClosest,
-        MouseRetargetClosest = Config.MouseRetargetClosest,
-        UltraScanInterval = Config.UltraScanInterval,
-        MinLockDistance = Config.MinLockDistance,
-        MaxLockDistance = Config.MaxLockDistance,
-        StrongValidation = Config.StrongValidation,
-        InstantBehindSnap = Config.InstantBehindSnap,
-        IgnoreActiveCounter = Config.IgnoreActiveCounter,
-        TargetPriority = Config.TargetPriority,
-        ToggleKey = keyToStr(Config.ToggleKey),
-        EnableLockKey = keyToStr(Config.EnableLockKey),
-        StickyLockKey = keyToStr(Config.StickyLockKey),
-        BehindKey = keyToStr(Config.BehindKey),
-        PriorityKey = keyToStr(Config.PriorityKey),
-        HoldThreshold = Config.HoldThreshold,
-        ClickLockDuration = Config.ClickLockDuration,
-        MouseHoldThreshold = Config.MouseHoldThreshold,
-        MouseClickLockDuration = Config.MouseClickLockDuration,
-        UseMouseButton1 = Config.UseMouseButton1,
-        LockKeys = lockKeyNames,
-        IgnoreAlliesEnabled = Config.IgnoreAllies.Enabled,
-        IgnoreAlliesUseUserId = Config.IgnoreAllies.UseUserId,
-        IgnoreAlliesUserIds = Config.IgnoreAllies.UserIds,
-        IgnoreAlliesNames = Config.IgnoreAllies.Names,
-        Theme = CurrentThemeName,
+        AimPointBySource = Config.AimPointBySource, AimOffsetBySource = Config.AimOffsetBySource,
+        AboveHeadHeight = Config.AboveHeadHeight, AimSmooth = Config.AimSmooth,
+        UseSmoothTurn = Config.UseSmoothTurn, Smoothness = Config.Smoothness,
+        BehindHoldDelay = Config.BehindHoldDelay, BehindDistance = Config.BehindDistance,
+        BehindSmoothTime = Config.BehindSmoothTime, EnableTeleport = Config.EnableTeleport,
+        BlockRetargetClosest = Config.BlockRetargetClosest, SkillRetargetClosest = Config.SkillRetargetClosest,
+        MouseRetargetClosest = Config.MouseRetargetClosest, UltraScanInterval = Config.UltraScanInterval,
+        MinLockDistance = Config.MinLockDistance, MaxLockDistance = Config.MaxLockDistance,
+        StrongValidation = Config.StrongValidation, InstantBehindSnap = Config.InstantBehindSnap,
+        IgnoreActiveCounter = Config.IgnoreActiveCounter, TargetPriority = Config.TargetPriority,
+        ToggleKey = Config.ToggleKey.Name, EnableLockKey = Config.EnableLockKey.Name,
+        PanicKey = Config.PanicKey.Name, StickyLockKey = Config.StickyLockKey.Name,
+        BehindKey = Config.BehindKey.Name, PriorityKey = Config.PriorityKey.Name,
+        BlockKey = (Config.BlockKey or Enum.KeyCode.F).Name,
+        HoldThreshold = Config.HoldThreshold, ClickLockDuration = Config.ClickLockDuration,
+        MouseHoldThreshold = Config.MouseHoldThreshold, MouseClickLockDuration = Config.MouseClickLockDuration,
+        UseMouseButton1 = Config.UseMouseButton1, LockKeys = keys,
+        IgnoreAllies = Config.IgnoreAllies,
+        Accent = {math.floor(Theme.Accent.R*255+0.5), math.floor(Theme.Accent.G*255+0.5), math.floor(Theme.Accent.B*255+0.5)},
     }
 end
-
-local function applyConfig(data)
-    if not data or type(data) ~= "table" then return false end
-    local function set(k, v)
-        if v ~= nil then Config[k] = v end
-    end
-    set("RotateMode", data.RotateMode)
-    set("TurnDeadzoneDegrees", data.TurnDeadzoneDegrees)
-    set("ZeroDeadzoneWhenHolding", data.ZeroDeadzoneWhenHolding)
-    set("UsePrediction", data.UsePrediction)
-    set("PredictionStrength", data.PredictionStrength)
-    set("PredictionMaxSpeed", data.PredictionMaxSpeed)
-    set("PredictionHistorySmoothing", data.PredictionHistorySmoothing)
-    if data.AimPointDefault then
-        Config.AimPointBySource.default = data.AimPointDefault
-        Config.AimPointBySource.sticky = data.AimPointDefault
-        Config.AimPointBySource.priority = data.AimPointDefault
-    end
-    if data.AimOffsetDefault then
-        Config.AimOffsetBySource.default = data.AimOffsetDefault
-        Config.AimOffsetBySource.sticky = data.AimOffsetDefault
-        Config.AimOffsetBySource.priority = data.AimOffsetDefault
-    end
-    set("AboveHeadHeight", data.AboveHeadHeight)
-    set("AimSmooth", data.AimSmooth)
-    set("UseSmoothTurn", data.UseSmoothTurn)
-    set("Smoothness", data.Smoothness)
-    set("BehindHoldDelay", data.BehindHoldDelay)
-    set("BehindDistance", data.BehindDistance)
-    set("BehindSmoothTime", data.BehindSmoothTime)
-    set("EnableTeleport", data.EnableTeleport)
-    set("BlockRetargetClosest", data.BlockRetargetClosest)
-    set("SkillRetargetClosest", data.SkillRetargetClosest)
-    set("MouseRetargetClosest", data.MouseRetargetClosest)
-    set("UltraScanInterval", data.UltraScanInterval)
-    set("MinLockDistance", data.MinLockDistance)
-    set("MaxLockDistance", data.MaxLockDistance)
-    set("StrongValidation", data.StrongValidation)
-    set("InstantBehindSnap", data.InstantBehindSnap)
-    set("IgnoreActiveCounter", data.IgnoreActiveCounter)
-    set("TargetPriority", data.TargetPriority)
-    if data.ToggleKey then Config.ToggleKey = strToKey(data.ToggleKey) end
-    if data.EnableLockKey then Config.EnableLockKey = strToKey(data.EnableLockKey) end
-    if data.StickyLockKey then Config.StickyLockKey = strToKey(data.StickyLockKey) end
-    if data.BehindKey then Config.BehindKey = strToKey(data.BehindKey) end
-    if data.PriorityKey then Config.PriorityKey = strToKey(data.PriorityKey) end
-    set("HoldThreshold", data.HoldThreshold)
-    set("ClickLockDuration", data.ClickLockDuration)
-    set("MouseHoldThreshold", data.MouseHoldThreshold)
-    set("MouseClickLockDuration", data.MouseClickLockDuration)
-    set("UseMouseButton1", data.UseMouseButton1)
-    if type(data.LockKeys) == "table" then
-        Config.LockKeys = {}
-        for _, name in ipairs(data.LockKeys) do
-            local k = strToKey(name)
-            if k ~= Enum.KeyCode.Unknown then table.insert(Config.LockKeys, k) end
+local function toKey(s)
+    local ok, k = pcall(function() return Enum.KeyCode[s] end)
+    return (ok and k) or Enum.KeyCode.Unknown
+end
+local function apply(data)
+    if type(data) ~= "table" then return false end
+    for k, v in pairs(data) do
+        if k == "LockKeys" and type(v) == "table" then
+            Config.LockKeys = {}
+            for _, n in ipairs(v) do local kk = toKey(n); if kk ~= Enum.KeyCode.Unknown then table.insert(Config.LockKeys, kk) end end
+        elseif k == "AimPointBySource" or k == "AimOffsetBySource" or k == "IgnoreAllies" then
+            if type(v) == "table" then Config[k] = v end
+        elseif type(Config[k]) == "EnumItem" or k:find("Key") then
+            Config[k] = toKey(v)
+        elseif Config[k] ~= nil then
+            Config[k] = v
         end
     end
-    if data.IgnoreAlliesEnabled ~= nil then Config.IgnoreAllies.Enabled = data.IgnoreAlliesEnabled end
-    if data.IgnoreAlliesUseUserId ~= nil then Config.IgnoreAllies.UseUserId = data.IgnoreAlliesUseUserId end
-    if type(data.IgnoreAlliesUserIds) == "table" then Config.IgnoreAllies.UserIds = data.IgnoreAlliesUserIds end
-    if type(data.IgnoreAlliesNames) == "table" then Config.IgnoreAllies.Names = data.IgnoreAlliesNames end
-    rebuildAllyCache()
-    if data.Theme and Themes[data.Theme] then
-        CurrentThemeName = data.Theme
-        Theme = Themes[data.Theme]
-        TopLine.BackgroundColor3 = Theme.Accent
+    if type(data.Accent) == "table" and #data.Accent >= 3 then
+        applyAccent(Color3.fromRGB(data.Accent[1], data.Accent[2], data.Accent[3]))
     end
+    rebuildAllyCache()
     return true
 end
 
-local function canFS()
-    return type(writefile) == "function" and type(readfile) == "function"
-end
-
-local function ensureFolder()
-    if type(isfolder) == "function" and type(makefolder) == "function" then
-        if not isfolder(SAVE_FOLDER) then
-            pcall(makefolder, SAVE_FOLDER)
-        end
-    end
-end
-
-local function saveConfig(name)
-    name = name or "default"
-    local path = SAVE_FOLDER .. "/" .. name .. ".json"
-    local ok, err = pcall(function()
-        ensureFolder()
-        local json = HttpService:JSONEncode(serializeConfig())
-        if canFS() then
-            writefile(path, json)
-        else
-            if type(setclipboard) == "function" then
-                setclipboard(json)
-            end
-            error("No writefile — config copied to clipboard instead")
-        end
-    end)
-    return ok, err
-end
-
-local function loadConfig(name)
-    name = name or "default"
-    local path = SAVE_FOLDER .. "/" .. name .. ".json"
-    local ok, data = pcall(function()
-        if canFS() and (type(isfile) ~= "function" or isfile(path)) then
-            local raw = readfile(path)
-            return HttpService:JSONDecode(raw)
-        end
-        error("File not found or no readfile")
-    end)
-    if ok and data then
-        applyConfig(data)
-        return true
-    end
-    return false, data
-end
-
-local cSave = Card(pageCF.left, "Save / Load")
-local statusCfg = Label(cSave, "Status: ready", 11, Theme.SubText)
-statusCfg.Size = UDim2.new(1, 0, 0, 20)
-
-local nameBox = New("TextBox", {
-    Size = UDim2.new(1, 0, 0, 28),
-    BackgroundColor3 = Theme.Element,
-    Text = "default",
-    PlaceholderText = "config name",
-    TextColor3 = Theme.Text,
-    PlaceholderColor3 = Theme.SubText,
-    TextSize = 12,
-    Font = Enum.Font.Gotham,
-    ClearTextOnFocus = false,
-    BorderSizePixel = 0,
-}, cSave)
-Corner(nameBox, 5)
-
-local function makeBtn(parent, text, color, fn)
+local cSave = Card(pCF.L, "Save / Load", "file")
+local stLbl = Label(cSave, "Status: ready", 11, Theme.SubText)
+stLbl.Size = UDim2.new(1, 0, 0, 18)
+local function mkBtn(parent, text, col, fn)
     local b = New("TextButton", {
-        Size = UDim2.new(1, 0, 0, 32),
-        BackgroundColor3 = color or Theme.Accent,
-        BorderSizePixel = 0,
-        Text = text,
-        TextColor3 = Color3.new(1,1,1),
-        TextSize = 12,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
+        Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = col or Theme.Accent,
+        BorderSizePixel = 0, Text = text, TextColor3 = Color3.new(1,1,1),
+        TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false,
     }, parent)
     Corner(b, 6)
     b.Activated:Connect(fn)
     return b
 end
-
-makeBtn(cSave, "Save Config", Theme.Accent, function()
-    local name = nameBox.Text
-    if name == "" then name = "default" end
-    local ok, err = saveConfig(name)
-    if ok then
-        statusCfg.Text = "Status: saved → " .. name
-        statusCfg.TextColor3 = Theme.Green
-    else
-        statusCfg.Text = "Status: " .. tostring(err)
-        statusCfg.TextColor3 = Theme.Red
-    end
-end)
-
-makeBtn(cSave, "Load Config", Theme.AccentDark, function()
-    local name = nameBox.Text
-    if name == "" then name = "default" end
-    local ok, err = loadConfig(name)
-    if ok then
-        statusCfg.Text = "Status: loaded ← " .. name .. " (reopen menu if UI stale)"
-        statusCfg.TextColor3 = Theme.Green
-        rebuildPlayerList()
-        for _, b in ipairs(AllBinds) do if b.Refresh then b.Refresh() end end
-    else
-        statusCfg.Text = "Status: load failed — " .. tostring(err)
-        statusCfg.TextColor3 = Theme.Red
-    end
-end)
-
-makeBtn(cSave, "Copy Config to Clipboard", Theme.Element, function()
+mkBtn(cSave, "Save Config", Theme.Accent, function()
     local ok, err = pcall(function()
-        local json = HttpService:JSONEncode(serializeConfig())
-        if type(setclipboard) == "function" then
-            setclipboard(json)
-        else
-            error("setclipboard not available")
-        end
+        local json = HttpService:JSONEncode(ser())
+        if type(writefile) == "function" then writefile("TurboLockConfig.json", json)
+        elseif type(setclipboard) == "function" then setclipboard(json); error("no writefile — copied to clipboard") 
+        else error("no writefile") end
     end)
-    if ok then
-        statusCfg.Text = "Status: copied to clipboard"
-        statusCfg.TextColor3 = Theme.Green
-    else
-        statusCfg.Text = "Status: " .. tostring(err)
-        statusCfg.TextColor3 = Theme.Red
-    end
+    stLbl.Text = ok and "Status: saved" or ("Status: " .. tostring(err))
+    stLbl.TextColor3 = ok and Theme.Green or Theme.Red
+end)
+mkBtn(cSave, "Load Config", Color3.fromRGB(160, 50, 60), function()
+    local ok, err = pcall(function()
+        if type(readfile) ~= "function" then error("no readfile") end
+        local data = HttpService:JSONDecode(readfile("TurboLockConfig.json"))
+        if not apply(data) then error("apply failed") end
+    end)
+    stLbl.Text = ok and "Status: loaded" or ("Status: " .. tostring(err))
+    stLbl.TextColor3 = ok and Theme.Green or Theme.Red
+    if ok then rebuildPL() end
 end)
 
-local cInfo = Card(pageCF.right, "Info")
-local infoLbl = Label(cInfo, "Configs are saved as JSON in the TurboConfigs folder (executor filesystem).\n\nIf writefile is unavailable, Save copies JSON to clipboard.\n\nAfter Load, some UI labels refresh automatically; reopen tabs if needed.", 11, Theme.SubText)
-infoLbl.Size = UDim2.new(1, 0, 0, 120)
-infoLbl.TextWrapped = true
-infoLbl.TextYAlignment = Enum.TextYAlignment.Top
+local cInfo = Card(pCF.R, "Info", "info")
+local info = Label(cInfo, "Icons load from GitHub (Turbo/Images) — unique per section, 256px sources scaled with Fit.\n\nPanic Key fully kills the script GUI + lock.\n\nAim Parts: set part + offset per source (Block, Skill, M1, Behind, Priority, Sticky).", 11, Theme.SubText)
+info.Size = UDim2.new(1, 0, 0, 110)
+info.TextWrapped = true
+info.TextYAlignment = Enum.TextYAlignment.Top
 
--- =====================================================
--- DRAG
--- =====================================================
+-- Drag
 do
-    local dragging, dragStart, startPos
-    TopBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = Main.Position
+    local dragging, start, spos
+    Top.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; start = i.Position; spos = Main.Position end
+    end)
+    Top.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = i.Position - start
+            Main.Position = UDim2.new(spos.X.Scale, spos.X.Offset + d.X, spos.Y.Scale, spos.Y.Offset + d.Y)
         end
-    end)
-    TopBar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging then return end
-        if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-        local d = input.Position - dragStart
-        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
     end)
 end
 
--- =====================================================
--- MENU STATE / FOCUS
--- =====================================================
-local MenuOpen = true
+-- Scroll closes lists
+for _, p in pairs(Pages) do
+    p.sc:GetPropertyChangedSignal("CanvasPosition"):Connect(closeLists)
+end
 
-local function ClearFocus()
+local MenuOpen = true
+local function clearFocus()
     local f = UserInputService:GetFocusedTextBox()
     if f then pcall(function() f:ReleaseFocus() end) end
     pcall(function() GuiService.SelectedObject = nil end)
 end
-
-local function SetMenu(state)
-    MenuOpen = state
-    if not state then
-        CloseDropdown()
-        if BindingBtn then
-            BindingBtn.TextColor3 = Theme.Text
-            BindingBtn = nil
-        end
-        ClearFocus()
+local function setMenu(v)
+    MenuOpen = v
+    if not v then
+        closeLists()
+        Binding = nil
+        clearFocus()
         ScreenGui.Enabled = false
     else
         ScreenGui.Enabled = true
-        ClearFocus()
+        clearFocus()
     end
+end
+
+local function doPanic()
+    turboPanicked = true
+    lockEnabled = false
+    pcall(hardClearLock)
+    pcall(clearSticky)
+    pcall(function() setRotateEnabled(false) end)
+    closeLists()
+    ScreenGui.Enabled = false
+    ScreenGui:Destroy()
+    print("[Turbo] PANIC — lock disabled, GUI destroyed. Re-execute script to restore.")
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
+    if turboPanicked then return end
 
-    if input.KeyCode == Config.ToggleKey then
-        SetMenu(not MenuOpen)
+    if input.KeyCode == Config.PanicKey then
+        doPanic()
         return
     end
 
-    if BindingBtn then
+    if input.KeyCode == Config.ToggleKey then
+        setMenu(not MenuOpen)
+        return
+    end
+
+    if Binding then
         if input.KeyCode == Enum.KeyCode.Escape then
-            BindingBtn.TextColor3 = Theme.Text
-            for _, b in ipairs(AllBinds) do if b.Refresh then b.Refresh() end end
-            BindingBtn = nil
+            Binding.TextColor3 = Theme.Text
+            for _, b in ipairs(AllBinds) do b.btn.Text = b.getter().Name end
+            Binding = nil
             return
         end
         if input.UserInputType == Enum.UserInputType.Keyboard then
             for _, b in ipairs(AllBinds) do
-                if b._btn == BindingBtn then
-                    b._setter(input.KeyCode)
-                    break
-                end
+                if b.btn == Binding then b.setter(input.KeyCode); break end
             end
-            BindingBtn.Text = KeyName(input.KeyCode)
-            BindingBtn.TextColor3 = Theme.Text
-            BindingBtn = nil
-            ClearFocus()
+            Binding.Text = input.KeyCode.Name
+            Binding.TextColor3 = Theme.Text
+            Binding = nil
+            clearFocus()
         end
     end
 end)
 
--- Status from lock
-onLockEnabledChanged = function(enabled)
-    if enabled then
-        StatusLbl.Text = "● ACTIVE"
-        StatusLbl.TextColor3 = Theme.Green
-    else
-        StatusLbl.Text = "● OFF"
-        StatusLbl.TextColor3 = Theme.Red
-    end
+onLockEnabledChanged = function(en)
+    StatusLbl.Text = en and "● ACTIVE" or "● OFF"
+    StatusLbl.TextColor3 = en and Theme.Green or Theme.Red
 end
 onLockEnabledChanged(lockEnabled)
 
--- Default tab
-SelectTab("CharacterLock")
-SetMenu(true)
+selectTab("Character")
+setMenu(true)
 
-print("Turbo GUI v4 | Save/Load | " .. Config.ToggleKey.Name .. " = menu | " .. Config.EnableLockKey.Name .. " = lock")
+-- Warm icon cache in background
+task.spawn(function()
+    for name in pairs(ICON_FILES) do
+        pcall(getIcon, name)
+        task.wait()
+    end
+end)
+
+print("Turbo GUI v5.1 | Unique Icons | AimParts | Accent | Reduced Pixelation | Panic=" .. Config.PanicKey.Name)
