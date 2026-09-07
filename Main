@@ -7,138 +7,140 @@ local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
 local Stats            = game:GetService("Stats")
+local GuiService       = game:GetService("GuiService")
+local HttpService      = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
+local PlayerGui = player:WaitForChild("PlayerGui")
 
 -- ======================================================
 -- CONFIG
 -- ======================================================
 local Config = {
-    LockKeys = {
-        Enum.KeyCode.One,
-        Enum.KeyCode.Two,
-        Enum.KeyCode.Three,
-        Enum.KeyCode.Four,
-        Enum.KeyCode.F,
-    },
+	LockKeys = {
+		Enum.KeyCode.One,
+		Enum.KeyCode.Two,
+		Enum.KeyCode.Three,
+		Enum.KeyCode.Four,
+		Enum.KeyCode.F,
+	},
 
-    UseMouseButton1      = true,
-    ToggleKey            = Enum.KeyCode.Insert,
-    EnableLockKey        = Enum.KeyCode.CapsLock,
-    BlockKey             = Enum.KeyCode.F,
-    PanicKey             = Enum.KeyCode.End,
-    BehindKey            = Enum.KeyCode.Q,
-    PriorityKey          = Enum.KeyCode.LeftAlt,
-    PriorityAlsoRightAlt = false,
-    StickyLockKey        = Enum.KeyCode.RightAlt,
+	UseMouseButton1      = true,
+	ToggleKey            = Enum.KeyCode.Insert,
+	EnableLockKey        = Enum.KeyCode.CapsLock,
+	BlockKey             = Enum.KeyCode.F,
+	PanicKey             = Enum.KeyCode.End,
+	BehindKey            = Enum.KeyCode.Q,
+	PriorityKey          = Enum.KeyCode.LeftAlt,
+	PriorityAlsoRightAlt = false,
+	StickyLockKey        = Enum.KeyCode.RightAlt,
 
-    HoldThreshold        = 0.14,
-    ClickLockDuration    = 0.32,
-    MouseHoldThreshold   = 0.14,
-    MouseClickLockDuration = 0.25,
+	HoldThreshold        = 0.14,
+	ClickLockDuration    = 0.32,
+	MouseHoldThreshold   = 0.14,
+	MouseClickLockDuration = 0.25,
 
-    BlockRetargetClosest = true,
-    SkillRetargetClosest = true,
-    MouseRetargetClosest = true,
+	BlockRetargetClosest = true,
+	SkillRetargetClosest = true,
+	MouseRetargetClosest = true,
 
-    MinLockDistance = 0,
-    MaxLockDistance = 450,
+	MinLockDistance = 0,
+	MaxLockDistance = 450,
 
-    LockOnlyInFront = false,
-    FrontAngle      = 360,
+	LockOnlyInFront = false,
+	FrontAngle      = 360,
 
-    IgnoreAllies = {
-        Enabled   = false,
-        UseUserId = true,
-        UserIds   = {},
-        Names     = {},
-    },
+	IgnoreAllies = {
+		Enabled   = false,
+		UseUserId = true,
+		UserIds   = {},
+		Names     = {},
+	},
 
--- Players, NPC, Closest
-    TargetPriority = "Players",
+	TargetPriority = "Players",
 
-    RotateMode = "CFrame",
-    AlignResponsiveness = 4000,
-    AlignMaxTorque      = 1e9,
-    AlignRigidity       = false,
-    GyroP         = 70000,
-    GyroD         = 700,
-    GyroMaxTorque = Vector3.new(0, 1e9, 0),
-    AngVelResponsiveness = 25,
-    AngVelMax            = 40,
-    AngVelMaxTorque      = 1e9,
-    TorqueGain    = 180000,
-    TorqueDamping = 9000,
-    TorqueMax     = 1000000,
-    HumanoidMovePower = 1,
-    Motor6DMaxAngle   = math.rad(180),
+	RotateMode = "CFrame",
+	AlignResponsiveness = 4000,
+	AlignMaxTorque      = 1e9,
+	AlignRigidity       = false,
+	GyroP         = 70000,
+	GyroD         = 700,
+	GyroMaxTorque = Vector3.new(0, 1e9, 0),
+	AngVelResponsiveness = 25,
+	AngVelMax            = 40,
+	AngVelMaxTorque      = 1e9,
+	TorqueGain    = 180000,
+	TorqueDamping = 9000,
+	TorqueMax     = 1000000,
+	HumanoidMovePower = 1,
+	Motor6DMaxAngle   = math.rad(180),
 
-    UseSmoothTurn = false,
-    Smoothness    = 0.15,
-    TurnDeadzoneDegrees     = 0,
-    ZeroDeadzoneWhenHolding = true,
-    ZeroDeadzoneTargetSpeed = 0,
+	UseSmoothTurn = false,
+	Smoothness    = 0.15,
+	TurnDeadzoneDegrees     = 0,
+	ZeroDeadzoneWhenHolding = true,
+	ZeroDeadzoneTargetSpeed = 0,
 
-    AimPointBySource = {
-        block    = "Front",
-        skill    = "AboveHead",
-        mouse    = "Back",
-        q        = "Back",
-        priority = "Root",
-        sticky   = "Root",
-        default  = "Root",
-    },
+	AimPointBySource = {
+		block    = "Front",
+		skill    = "AboveHead",
+		mouse    = "Back",
+		q        = "Back",
+		priority = "Root",
+		sticky   = "Root",
+		default  = "Root",
+	},
 
-    AimOffsetBySource = {
-        block    = 0.4,
-        skill    = 0.4,
-        mouse    = 0.2,
-        q        = 0,
-        priority = 0,
-        sticky   = 0,
-        default  = 0,
-    },
+	AimOffsetBySource = {
+		block    = 0.4,
+		skill    = 0.4,
+		mouse    = 0.2,
+		q        = 0,
+		priority = 0,
+		sticky   = 0,
+		default  = 0,
+	},
 
-    AboveHeadHeight = 1.2,
-    AimSmooth = 0,
+	AboveHeadHeight = 1.2,
+	AimSmooth = 0,
 
-    StrongValidation = true,
-    PriorityAimRadiusPx = 220,
-    PriorityMaxDistance = 450,
+	StrongValidation = true,
+	PriorityAimRadiusPx = 220,
+	PriorityMaxDistance = 450,
 
-    BehindHoldDelay    = 0.15,
-    EnableTeleport     = true,
-    BehindDistance     = 3.2,
-    BehindHeight       = 0,
-    BehindSmoothTime   = 0.06,
-    CloseTeleportRange = 8,
-    BehindCooldown     = 0.10,
-    BehindRange        = 65,
+	BehindHoldDelay    = 0.27,
+	EnableTeleport     = true,
+	BehindDistance     = 1.6,
+	BehindHeight       = 0,
+	BehindSmoothTime   = 0.06,
+	CloseTeleportRange = 8,
+	BehindCooldown     = 0.10,
+	BehindRange        = 65,
 
-    Skill3BehindTP = {
-        Enabled    = false,
-        Key        = Enum.KeyCode.Three,
-        Delay      = 0.15,
-        Distance   = 3.2,
-        Height     = 0,
-        Smooth     = 0.04,
-        FaceTarget = true,
-    },
+	Skill3BehindTP = {
+		Enabled    = false,
+		Key        = Enum.KeyCode.Three,
+		Delay      = 0.21,
+		Distance   = 3.9,
+		Height     = 0,
+		Smooth     = 0,
+		FaceTarget = true,
+	},
 
-    InstantBehindSnap = true,
+	InstantBehindSnap = true,
 
-    UsePrediction              = true,
-    PredictionStrength         = 0.02,
-    PredictionMaxSpeed         = 120,
-    UsePingCompensation        = false,
-    PingCompensationMultiplier = 0,
-    PredictionHistorySmoothing = 18,
+	UsePrediction              = true,
+	PredictionStrength         = 0.02,
+	PredictionMaxSpeed         = 120,
+	UsePingCompensation        = false,
+	PingCompensationMultiplier = 0,
+	PredictionHistorySmoothing = 18,
 
-    GraceTimeAfterStun  = 0,
-    MaxVelocityToLock   = 85,
-    IgnoreActiveCounter = true,
-    UltraScanInterval   = 0,
+	GraceTimeAfterStun  = 0,
+	MaxVelocityToLock   = 85,
+	IgnoreActiveCounter = true,
+	UltraScanInterval   = 0,
 }
 
 -- ======================================================
@@ -174,815 +176,848 @@ local motor6DOriginalTransform = nil
 local skill3TPToken = 0
 
 local STUN_NAMES = {
-    "Stun", "Stunned", "Ragdoll", "Ragdolled", "Knockback",
-    "Staggered", "Frozen", "Hitstun", "Dizzy", "CC", "IsStunned"
+	"Stun", "Stunned", "Ragdoll", "Ragdolled", "Knockback",
+	"Staggered", "Frozen", "Hitstun", "Dizzy", "CC", "IsStunned"
 }
 
 local COUNTER_NAMES = {
-    "Counter", "Countering", "IsCounter", "IsCountering",
-    "Parry", "Parrying", "PerfectBlock", "CounterFrame",
-    "DeathCounter", "Riposte"
+	"Counter", "Countering", "IsCounter", "IsCountering",
+	"Parry", "Parrying", "PerfectBlock", "CounterFrame",
+	"DeathCounter", "Riposte"
 }
 
 local GRAB_MARKERS = {
-    "RootAnchor", "GrabIFrame", "GrabAnchor", "Grabbed",
-    "IsGrabbed", "BeingGrabbed", "GrabVictim",
-    "VictimAnchor", "GrabSlot", "InGrab", "GrabbedBy",
-    "Carry", "Carried", "IsCarried", "HoldVictim", "Held",
+	"RootAnchor", "GrabIFrame", "GrabAnchor", "Grabbed",
+	"IsGrabbed", "BeingGrabbed", "GrabVictim",
+	"VictimAnchor", "GrabSlot", "InGrab", "GrabbedBy",
+	"Carry", "Carried", "IsCarried", "HoldVictim", "Held",
 }
 
 local IGNORE_FOLDERS = {
-    Effects = true, Bullets = true, Beams = true, Debris = true,
-    FX = true, VFX = true, Particles = true, Projectiles = true,
-    Logic = true, LogicData = true, Spawns = true, Items = true,
-    Domains = true, Map = true, Terrain = true, Camera = true,
+	Effects = true, Bullets = true, Beams = true, Debris = true,
+	FX = true, VFX = true, Particles = true, Projectiles = true,
+	Logic = true, LogicData = true, Spawns = true, Items = true,
+	Domains = true, Map = true, Terrain = true, Camera = true,
+}
+
+local BAD_NAME_KEYWORDS = {
+	"effect", "vfx", "fx", "particle", "beam", "bullet", "projectile",
+	"hitbox", "clone", "temp", "debris", "trail", "aura", "mesh",
+	"part", "attachment", "weld", "constraint", "force", "bodygyro",
+	"bodyvelocity", "bodyposition", "blackflash", "flash", "slash",
+	"slashfx", "impact", "shockwave", "ring", "circle", "sphere",
+	"orb", "ball", "spark", "lightning", "fire", "smoke", "dust",
 }
 
 -- ======================================================
 -- HELPERS
 -- ======================================================
 local function rebuildAllyCache()
-    table.clear(allyUserIdSet)
-    table.clear(allyNameSet)
-    if not Config.IgnoreAllies.Enabled then return end
-    if Config.IgnoreAllies.UseUserId then
-        for _, id in ipairs(Config.IgnoreAllies.UserIds) do
-            allyUserIdSet[tonumber(id)] = true
-        end
-    else
-        for _, name in ipairs(Config.IgnoreAllies.Names) do
-            allyNameSet[string.lower(tostring(name))] = true
-        end
-    end
+	table.clear(allyUserIdSet)
+	table.clear(allyNameSet)
+	if not Config.IgnoreAllies.Enabled then return end
+	if Config.IgnoreAllies.UseUserId then
+		for _, id in ipairs(Config.IgnoreAllies.UserIds) do
+			allyUserIdSet[tonumber(id)] = true
+		end
+	else
+		for _, name in ipairs(Config.IgnoreAllies.Names) do
+			allyNameSet[string.lower(tostring(name))] = true
+		end
+	end
 end
 
 rebuildAllyCache()
 
 local function restoreMotor6D()
-    if motor6D and motor6D.Parent and motor6DOriginalTransform then
-        pcall(function()
-            motor6D.Transform = motor6DOriginalTransform
-        end)
-    end
+	if motor6D and motor6D.Parent and motor6DOriginalTransform then
+		pcall(function()
+			motor6D.Transform = motor6DOriginalTransform
+		end)
+	end
 end
 
 local function destroyRotateInstances()
-    restoreMotor6D()
-    local objects = {
-        alignOrientation, alignAttachment,
-        align2Orientation, align2Attachment, align2TargetAttachment,
-        bodyGyro, angVelConstraint, angVelAttachment,
-        torqueConstraint, torqueAttachment,
-    }
-    for _, obj in ipairs(objects) do
-        if obj then
-            pcall(function() obj:Destroy() end)
-        end
-    end
-    alignOrientation, alignAttachment = nil, nil
-    align2Orientation, align2Attachment, align2TargetAttachment = nil, nil, nil
-    bodyGyro = nil
-    angVelConstraint, angVelAttachment = nil, nil
-    torqueConstraint, torqueAttachment = nil, nil
-    motor6D, motor6DOriginalTransform = nil, nil
+	restoreMotor6D()
+	local objects = {
+		alignOrientation, alignAttachment,
+		align2Orientation, align2Attachment, align2TargetAttachment,
+		bodyGyro, angVelConstraint, angVelAttachment,
+		torqueConstraint, torqueAttachment,
+	}
+	for _, obj in ipairs(objects) do
+		if obj then
+			pcall(function() obj:Destroy() end)
+		end
+	end
+	alignOrientation, alignAttachment = nil, nil
+	align2Orientation, align2Attachment, align2TargetAttachment = nil, nil, nil
+	bodyGyro = nil
+	angVelConstraint, angVelAttachment = nil, nil
+	torqueConstraint, torqueAttachment = nil, nil
+	motor6D, motor6DOriginalTransform = nil, nil
 end
 
 local function findRootMotor6D()
-    if not character then return nil end
-    local joint = character:FindFirstChild("RootJoint", true)
-        or character:FindFirstChild("Root", true)
-    if joint and joint:IsA("Motor6D") then
-        return joint
-    end
-    return nil
+	if not character then return nil end
+	local joint = character:FindFirstChild("RootJoint", true)
+		or character:FindFirstChild("Root", true)
+	if joint and joint:IsA("Motor6D") then
+		return joint
+	end
+	return nil
 end
 
 local function getRoot(model)
-    if not model then return nil end
-    local hrp = model:FindFirstChild("HumanoidRootPart")
-        or model:FindFirstChild("RootPart")
-        or model:FindFirstChild("Root")
-        or model.PrimaryPart
-    if hrp and hrp:IsA("BasePart") then return hrp end
-    return nil
+	if not model then return nil end
+	local hrp = model:FindFirstChild("HumanoidRootPart")
+		or model:FindFirstChild("RootPart")
+		or model:FindFirstChild("Root")
+		or model.PrimaryPart
+	if hrp and hrp:IsA("BasePart") then return hrp end
+	return nil
 end
 
 local function setupRotateInstances(target)
-    destroyRotateInstances()
-    if not rootPart then return end
-    local mode = Config.RotateMode
-    if mode == "Align" then
-        alignAttachment = Instance.new("Attachment")
-        alignAttachment.Name = "LockAlignAtt"
-        alignAttachment.Parent = rootPart
-        alignOrientation = Instance.new("AlignOrientation")
-        alignOrientation.Name = "LockAlign"
-        alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
-        alignOrientation.Attachment0 = alignAttachment
-        alignOrientation.Responsiveness = Config.AlignResponsiveness or 4000
-        alignOrientation.MaxTorque = Config.AlignMaxTorque or 1e9
-        alignOrientation.MaxAngularVelocity = math.huge
-        alignOrientation.RigidityEnabled = Config.AlignRigidity == true
-        alignOrientation.Enabled = false
-        alignOrientation.Parent = rootPart
-    elseif mode == "Align2" then
-        if not target then return end
-        local targetRoot = getRoot(target)
-        if not targetRoot then return end
-        align2Attachment = Instance.new("Attachment")
-        align2Attachment.Name = "LockAlign2Att"
-        align2Attachment.Parent = rootPart
-        align2TargetAttachment = Instance.new("Attachment")
-        align2TargetAttachment.Name = "LockAlign2Target"
-        align2TargetAttachment.Parent = targetRoot
-        align2Orientation = Instance.new("AlignOrientation")
-        align2Orientation.Name = "LockAlign2"
-        align2Orientation.Mode = Enum.OrientationAlignmentMode.TwoAttachment
-        align2Orientation.Attachment0 = align2Attachment
-        align2Orientation.Attachment1 = align2TargetAttachment
-        align2Orientation.MaxTorque = Config.AlignMaxTorque or 1e9
-        align2Orientation.MaxAngularVelocity = math.huge
-        align2Orientation.Responsiveness = Config.AlignResponsiveness or 4000
-        align2Orientation.RigidityEnabled = Config.AlignRigidity == true
-        align2Orientation.ReactionTorqueEnabled = false
-        align2Orientation.Enabled = false
-        align2Orientation.Parent = rootPart
-    elseif mode == "BodyGyro" then
-        bodyGyro = Instance.new("BodyGyro")
-        bodyGyro.Name = "LockGyro"
-        bodyGyro.P = Config.GyroP or 35000
-        bodyGyro.D = Config.GyroD or 400
-        bodyGyro.MaxTorque = Vector3.zero
-        bodyGyro.Parent = rootPart
-    elseif mode == "AngularVel" then
-        angVelAttachment = Instance.new("Attachment")
-        angVelAttachment.Name = "LockAngVelAtt"
-        angVelAttachment.Parent = rootPart
-        angVelConstraint = Instance.new("AngularVelocity")
-        angVelConstraint.Name = "LockAngVel"
-        angVelConstraint.Attachment0 = angVelAttachment
-        angVelConstraint.RelativeTo = Enum.ActuatorRelativeTo.World
-        angVelConstraint.MaxTorque = Config.AngVelMaxTorque or 1e9
-        angVelConstraint.AngularVelocity = Vector3.zero
-        angVelConstraint.Enabled = false
-        angVelConstraint.Parent = rootPart
-    elseif mode == "Torque" then
-        torqueAttachment = Instance.new("Attachment")
-        torqueAttachment.Name = "LockTorqueAtt"
-        torqueAttachment.Parent = rootPart
-        torqueConstraint = Instance.new("Torque")
-        torqueConstraint.Name = "LockTorque"
-        torqueConstraint.Attachment0 = torqueAttachment
-        torqueConstraint.RelativeTo = Enum.ActuatorRelativeTo.World
-        torqueConstraint.Torque = Vector3.zero
-        torqueConstraint.Enabled = false
-        torqueConstraint.Parent = rootPart
-    elseif mode == "Motor6D" then
-        motor6D = findRootMotor6D()
-        if motor6D then
-            motor6DOriginalTransform = motor6D.Transform
-        end
-    end
-end
-
-local function yawError(flatLook, flatTo)
-    local cross = flatLook:Cross(flatTo)
-    local dot = math.clamp(flatLook:Dot(flatTo), -1, 1)
-    return math.atan2(cross.Y, dot)
+	destroyRotateInstances()
+	if not rootPart then return end
+	local mode = Config.RotateMode
+	if mode == "Align" then
+		alignAttachment = Instance.new("Attachment")
+		alignAttachment.Name = "LockAlignAtt"
+		alignAttachment.Parent = rootPart
+		alignOrientation = Instance.new("AlignOrientation")
+		alignOrientation.Name = "LockAlign"
+		alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+		alignOrientation.Attachment0 = alignAttachment
+		alignOrientation.Responsiveness = Config.AlignResponsiveness or 4000
+		alignOrientation.MaxTorque = Config.AlignMaxTorque or 1e9
+		alignOrientation.MaxAngularVelocity = math.huge
+		alignOrientation.RigidityEnabled = Config.AlignRigidity == true
+		alignOrientation.Enabled = false
+		alignOrientation.Parent = rootPart
+	elseif mode == "Align2" then
+		if not target then return end
+		local targetRoot = getRoot(target)
+		if not targetRoot then return end
+		align2Attachment = Instance.new("Attachment")
+		align2Attachment.Name = "LockAlign2Att"
+		align2Attachment.Parent = rootPart
+		align2TargetAttachment = Instance.new("Attachment")
+		align2TargetAttachment.Name = "LockAlign2Target"
+		align2TargetAttachment.Parent = targetRoot
+		align2Orientation = Instance.new("AlignOrientation")
+		align2Orientation.Name = "LockAlign2"
+		align2Orientation.Mode = Enum.OrientationAlignmentMode.TwoAttachment
+		align2Orientation.Attachment0 = align2Attachment
+		align2Orientation.Attachment1 = align2TargetAttachment
+		align2Orientation.MaxTorque = Config.AlignMaxTorque or 1e9
+		align2Orientation.MaxAngularVelocity = math.huge
+		align2Orientation.Responsiveness = Config.AlignResponsiveness or 4000
+		align2Orientation.RigidityEnabled = Config.AlignRigidity == true
+		align2Orientation.ReactionTorqueEnabled = false
+		align2Orientation.Enabled = false
+		align2Orientation.Parent = rootPart
+	elseif mode == "BodyGyro" then
+		bodyGyro = Instance.new("BodyGyro")
+		bodyGyro.Name = "LockGyro"
+		bodyGyro.P = Config.GyroP or 35000
+		bodyGyro.D = Config.GyroD or 400
+		bodyGyro.MaxTorque = Vector3.zero
+		bodyGyro.Parent = rootPart
+	elseif mode == "AngularVel" then
+		angVelAttachment = Instance.new("Attachment")
+		angVelAttachment.Name = "LockAngVelAtt"
+		angVelAttachment.Parent = rootPart
+		angVelConstraint = Instance.new("AngularVelocity")
+		angVelConstraint.Name = "LockAngVel"
+		angVelConstraint.Attachment0 = angVelAttachment
+		angVelConstraint.RelativeTo = Enum.ActuatorRelativeTo.World
+		angVelConstraint.MaxTorque = Config.AngVelMaxTorque or 1e9
+		angVelConstraint.AngularVelocity = Vector3.zero
+		angVelConstraint.Enabled = false
+		angVelConstraint.Parent = rootPart
+	elseif mode == "Torque" then
+		torqueAttachment = Instance.new("Attachment")
+		torqueAttachment.Name = "LockTorqueAtt"
+		torqueAttachment.Parent = rootPart
+		torqueConstraint = Instance.new("Torque")
+		torqueConstraint.Name = "LockTorque"
+		torqueConstraint.Attachment0 = torqueAttachment
+		torqueConstraint.RelativeTo = Enum.ActuatorRelativeTo.World
+		torqueConstraint.Torque = Vector3.zero
+		torqueConstraint.Enabled = false
+		torqueConstraint.Parent = rootPart
+	elseif mode == "Motor6D" then
+		motor6D = findRootMotor6D()
+		if motor6D then
+			motor6DOriginalTransform = motor6D.Transform
+		end
+	end
 end
 
 local function setRotateEnabled(on, goalCFrame)
-    local mode = Config.RotateMode or "CFrame"
-    if mode == "Align" then
-        if alignOrientation then
-            alignOrientation.Enabled = on
-            if on and goalCFrame then
-                alignOrientation.CFrame = goalCFrame
-            end
-        end
-    elseif mode == "Align2" then
-        if align2Orientation then
-            align2Orientation.Enabled = on
-        end
-    elseif mode == "BodyGyro" then
-        if bodyGyro then
-            if on and goalCFrame then
-                bodyGyro.MaxTorque = Config.GyroMaxTorque or Vector3.new(0, 1e9, 0)
-                bodyGyro.CFrame = goalCFrame
-            else
-                bodyGyro.MaxTorque = Vector3.zero
-            end
-        end
-    elseif mode == "AngularVel" then
-        if angVelConstraint then
-            angVelConstraint.Enabled = on
-            if not on then
-                angVelConstraint.AngularVelocity = Vector3.zero
-            end
-        end
-    elseif mode == "Torque" then
-        if torqueConstraint then
-            torqueConstraint.Enabled = on
-            if not on then
-                torqueConstraint.Torque = Vector3.zero
-            end
-        end
-    elseif mode == "Motor6D" then
-        if not on then
-            restoreMotor6D()
-        end
-    elseif mode == "Assembly" then
-        if not on and rootPart then
-            local av = rootPart.AssemblyAngularVelocity
-            rootPart.AssemblyAngularVelocity = Vector3.new(av.X, 0, av.Z)
-        end
-    end
+	local mode = Config.RotateMode or "CFrame"
+	if mode == "Align" then
+		if alignOrientation then
+			alignOrientation.Enabled = on
+			if on and goalCFrame then
+				alignOrientation.CFrame = goalCFrame
+			end
+		end
+	elseif mode == "Align2" then
+		if align2Orientation then
+			align2Orientation.Enabled = on
+		end
+	elseif mode == "BodyGyro" then
+		if bodyGyro then
+			if on and goalCFrame then
+				bodyGyro.MaxTorque = Config.GyroMaxTorque or Vector3.new(0, 1e9, 0)
+				bodyGyro.CFrame = goalCFrame
+			else
+				bodyGyro.MaxTorque = Vector3.zero
+			end
+		end
+	elseif mode == "AngularVel" then
+		if angVelConstraint then
+			angVelConstraint.Enabled = on
+			if not on then
+				angVelConstraint.AngularVelocity = Vector3.zero
+			end
+		end
+	elseif mode == "Torque" then
+		if torqueConstraint then
+			torqueConstraint.Enabled = on
+			if not on then
+				torqueConstraint.Torque = Vector3.zero
+			end
+		end
+	elseif mode == "Motor6D" then
+		if not on then
+			restoreMotor6D()
+		end
+	elseif mode == "Assembly" then
+		if not on and rootPart then
+			local av = rootPart.AssemblyAngularVelocity
+			rootPart.AssemblyAngularVelocity = Vector3.new(av.X, 0, av.Z)
+		end
+	end
 end
 
 local function clearSticky()
-    stickyTarget = nil
+	stickyTarget = nil
 end
 
 local function hardClearLock()
-    lockedTarget = nil
-    activeLockKey = nil
-    lockExpireTime = 0
-    lockStartTime = 0
-    isHoldingMouse = false
-    currentLockSource = nil
-    smoothedAimPos, smoothedAimTarget = nil, nil
-    for _, conn in pairs(grabConnections) do
-        pcall(function() conn:Disconnect() end)
-    end
-    table.clear(grabConnections)
-    setRotateEnabled(false)
-    if humanoid and humanoid.Parent and not stickyTarget then
-        pcall(function() humanoid.AutoRotate = true end)
-    end
+	lockedTarget = nil
+	activeLockKey = nil
+	lockExpireTime = 0
+	lockStartTime = 0
+	isHoldingMouse = false
+	currentLockSource = nil
+	smoothedAimPos, smoothedAimTarget = nil, nil
+	for _, conn in pairs(grabConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	table.clear(grabConnections)
+	setRotateEnabled(false)
+	if humanoid and humanoid.Parent and not stickyTarget then
+		pcall(function() humanoid.AutoRotate = true end)
+	end
 end
 
 local function clearPriority()
-    priorityTarget = nil
+	priorityTarget = nil
 end
 
 local function setupCharacter(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    rootPart = char:WaitForChild("HumanoidRootPart")
-    hardClearLock()
-    clearPriority()
-    clearSticky()
-    setupRotateInstances()
-    isHoldingQ, qLocked, isTeleporting = false, false, false
-    disableUntil, lastState = 0, nil
-    table.clear(targetHistory)
-    skill3TPToken += 1
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	rootPart = char:WaitForChild("HumanoidRootPart")
+	hardClearLock()
+	clearPriority()
+	clearSticky()
+	setupRotateInstances()
+	isHoldingQ, qLocked, isTeleporting = false, false, false
+	disableUntil, lastState = 0, nil
+	table.clear(targetHistory)
+	skill3TPToken += 1
 end
 
 player.CharacterAdded:Connect(setupCharacter)
 if player.Character then
-    setupCharacter(player.Character)
+	setupCharacter(player.Character)
 end
 
 local function isGrabMarker(name)
-    if type(name) ~= "string" then return false end
-    local lower = string.lower(name)
-    if string.find(lower, "weapon", 1, true)
-        or string.find(lower, "tool", 1, true)
-        or string.find(lower, "#", 1, true) then
-        return false
-    end
-    for _, marker in ipairs(GRAB_MARKERS) do
-        if name == marker then return true end
-    end
-    return false
+	if type(name) ~= "string" then return false end
+	local lower = string.lower(name)
+	if string.find(lower, "weapon", 1, true)
+		or string.find(lower, "tool", 1, true)
+		or string.find(lower, "#", 1, true) then
+		return false
+	end
+	for _, marker in ipairs(GRAB_MARKERS) do
+		if name == marker then return true end
+	end
+	return false
 end
 
 local function watchTargetForGrab(target)
-    for _, conn in pairs(grabConnections) do
-        pcall(function() conn:Disconnect() end)
-    end
-    table.clear(grabConnections)
-    if not target or not target.Parent then return end
-    local ok, kids = pcall(function() return target:GetChildren() end)
-    if ok and kids then
-        for _, child in ipairs(kids) do
-            if isGrabMarker(child.Name) then
-                hardClearLock()
-                return
-            end
-        end
-    end
-    table.insert(grabConnections, target.ChildAdded:Connect(function(child)
-        if isGrabMarker(child.Name) then hardClearLock() end
-    end))
-    table.insert(grabConnections, target.AncestryChanged:Connect(function(_, parent)
-        if not parent then hardClearLock() end
-    end))
+	for _, conn in pairs(grabConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	table.clear(grabConnections)
+	if not target or not target.Parent then return end
+	local ok, kids = pcall(function() return target:GetChildren() end)
+	if ok and kids then
+		for _, child in ipairs(kids) do
+			if isGrabMarker(child.Name) then
+				hardClearLock()
+				return
+			end
+		end
+	end
+	table.insert(grabConnections, target.ChildAdded:Connect(function(child)
+		if isGrabMarker(child.Name) then hardClearLock() end
+	end))
+	table.insert(grabConnections, target.AncestryChanged:Connect(function(_, parent)
+		if not parent then hardClearLock() end
+	end))
 end
 
 local function isSelfRagdolled(lenient)
-    if not character or not humanoid then return true end
-    local state = humanoid:GetState()
-    if state == Enum.HumanoidStateType.Physics
-        or state == Enum.HumanoidStateType.Ragdoll then
-        return true
-    end
-    if not lenient and state == Enum.HumanoidStateType.FallingDown then
-        return true
-    end
-    if character:FindFirstChild("Ragdoll") or character:FindFirstChild("Ragdolled") then return true end
-    if character:GetAttribute("Ragdoll") == true or character:GetAttribute("Ragdolled") == true then return true end
-    return false
+	if not character or not humanoid then return true end
+	local state = humanoid:GetState()
+	if state == Enum.HumanoidStateType.Physics
+		or state == Enum.HumanoidStateType.Ragdoll then
+		return true
+	end
+	if not lenient and state == Enum.HumanoidStateType.FallingDown then
+		return true
+	end
+	if character:FindFirstChild("Ragdoll") or character:FindFirstChild("Ragdolled") then return true end
+	if character:GetAttribute("Ragdoll") == true or character:GetAttribute("Ragdolled") == true then return true end
+	return false
 end
 
 local function isActiveFlag(val)
-    if not val then return false end
-    if val:IsA("BoolValue") then return val.Value == true end
-    if val:IsA("IntValue") or val:IsA("NumberValue") then return val.Value > 0 end
-    return false
+	if not val then return false end
+	if val:IsA("BoolValue") then return val.Value == true end
+	if val:IsA("IntValue") or val:IsA("NumberValue") then return val.Value > 0 end
+	return false
 end
 
 local function isTargetCountering(model)
-    if not Config.IgnoreActiveCounter then return false end
-    if not model or not model.Parent then return false end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    for _, name in ipairs(COUNTER_NAMES) do
-        if model:GetAttribute(name) == true then return true end
-        if hum and hum:GetAttribute(name) == true then return true end
-        if isActiveFlag(model:FindFirstChild(name)) then return true end
-        if hum and isActiveFlag(hum:FindFirstChild(name)) then return true end
-    end
-    return false
+	if not Config.IgnoreActiveCounter then return false end
+	if not model or not model.Parent then return false end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	for _, name in ipairs(COUNTER_NAMES) do
+		if model:GetAttribute(name) == true then return true end
+		if hum and hum:GetAttribute(name) == true then return true end
+		if isActiveFlag(model:FindFirstChild(name)) then return true end
+		if hum and isActiveFlag(hum:FindFirstChild(name)) then return true end
+	end
+	return false
 end
 
 local function isStunned()
-    if not character or not humanoid then return false end
-    for _, name in ipairs(STUN_NAMES) do
-        if character:GetAttribute(name) == true or humanoid:GetAttribute(name) == true then return true end
-        local val = character:FindFirstChild(name) or humanoid:FindFirstChild(name)
-        if isActiveFlag(val) then return true end
-    end
-    return false
+	if not character or not humanoid then return false end
+	for _, name in ipairs(STUN_NAMES) do
+		if character:GetAttribute(name) == true or humanoid:GetAttribute(name) == true then return true end
+		local val = character:FindFirstChild(name) or humanoid:FindFirstChild(name)
+		if isActiveFlag(val) then return true end
+	end
+	return false
 end
 
 local function isInIgnoredFolder(model)
-    local current = model and model.Parent
-    for _ = 1, 8 do
-        if not current or current == workspace then break end
-        if IGNORE_FOLDERS[current.Name] then return true end
-        current = current.Parent
-    end
-    return false
+	local current = model and model.Parent
+	for _ = 1, 8 do
+		if not current or current == workspace then break end
+		if IGNORE_FOLDERS[current.Name] then return true end
+		current = current.Parent
+	end
+	return false
 end
 
 local function isAllyModel(model)
-    if not Config.IgnoreAllies.Enabled then return false end
-    local plr = Players:GetPlayerFromCharacter(model)
-    if not plr then return false end
-    if Config.IgnoreAllies.UseUserId then
-        return allyUserIdSet[plr.UserId] == true
-    end
-    return allyNameSet[string.lower(plr.Name)] == true
+	if not Config.IgnoreAllies.Enabled then return false end
+	local plr = Players:GetPlayerFromCharacter(model)
+	if not plr then return false end
+	if Config.IgnoreAllies.UseUserId then
+		return allyUserIdSet[plr.UserId] == true
+	end
+	return allyNameSet[string.lower(plr.Name)] == true
 end
 
 local function isInFront(hrp)
-    if not Config.LockOnlyInFront then return true end
-    if not rootPart or not hrp then return false end
-    local flatLook = Vector3.new(rootPart.CFrame.LookVector.X, 0, rootPart.CFrame.LookVector.Z)
-    if flatLook.Magnitude < 1e-3 then return true end
-    flatLook = flatLook.Unit
-    local offset = hrp.Position - rootPart.Position
-    local flatDir = Vector3.new(offset.X, 0, offset.Z)
-    if flatDir.Magnitude < 1e-3 then return true end
-    flatDir = flatDir.Unit
-    return flatLook:Dot(flatDir) >= math.cos(math.rad(Config.FrontAngle * 0.5))
+	if not Config.LockOnlyInFront then return true end
+	if not rootPart or not hrp then return false end
+	local flatLook = Vector3.new(rootPart.CFrame.LookVector.X, 0, rootPart.CFrame.LookVector.Z)
+	if flatLook.Magnitude < 1e-3 then return true end
+	flatLook = flatLook.Unit
+	local offset = hrp.Position - rootPart.Position
+	local flatDir = Vector3.new(offset.X, 0, offset.Z)
+	if flatDir.Magnitude < 1e-3 then return true end
+	flatDir = flatDir.Unit
+	return flatLook:Dot(flatDir) >= math.cos(math.rad(Config.FrontAngle * 0.5))
 end
 
 local function isWithinDistance(dist)
-    if dist > Config.MaxLockDistance then return false end
-    if Config.MinLockDistance > 0 and dist < Config.MinLockDistance then return false end
-    return true
+	if dist > Config.MaxLockDistance then return false end
+	if Config.MinLockDistance > 0 and dist < Config.MinLockDistance then return false end
+	return true
 end
 
 local function isPlayerCharacter(model)
-    return Players:GetPlayerFromCharacter(model) ~= nil
+	return Players:GetPlayerFromCharacter(model) ~= nil
+end
+
+local function hasBadName(model)
+	local name = string.lower(model.Name)
+	for _, kw in ipairs(BAD_NAME_KEYWORDS) do
+		if string.find(name, kw, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local function isRealCharacter(model)
+	if not model or not model:IsA("Model") then return false end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return false end
+	local hrp = getRoot(model)
+	if not hrp then return false end
+	local hasHead = model:FindFirstChild("Head")
+	local hasTorso = model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or model:FindFirstChild("LowerTorso")
+	if not hasHead and not hasTorso then return false end
+	return true
 end
 
 local function isValidTarget(model)
-    if not model or not model:IsA("Model") or model == character then return false end
-    if not model.Parent then return false end
-    if isInIgnoredFolder(model) then return false end
-    if isAllyModel(model) then return false end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return false end
-    local hrp = getRoot(model)
-    if not hrp then return false end
-    local pos = hrp.Position
-    if pos ~= pos or pos.Magnitude > 100000 then return false end
-    if not hrp:IsDescendantOf(model) then return false end
-    if isTargetCountering(model) then return false end
-    return true
+	if not model or not model:IsA("Model") or model == character then return false end
+	if not model.Parent then return false end
+	if isInIgnoredFolder(model) then return false end
+	if isAllyModel(model) then return false end
+	if hasBadName(model) then return false end
+	if not isRealCharacter(model) then return false end
+	local hrp = getRoot(model)
+	if not hrp then return false end
+	local pos = hrp.Position
+	if pos ~= pos or pos.Magnitude > 100000 then return false end
+	if not hrp:IsDescendantOf(model) then return false end
+	if isTargetCountering(model) then return false end
+	return true
 end
 
 local function findPart(model, names)
-    for _, n in ipairs(names) do
-        local p = model:FindFirstChild(n, true)
-        if p and p:IsA("BasePart") then return p end
-    end
-    return nil
+	for _, n in ipairs(names) do
+		local p = model:FindFirstChild(n, true)
+		if p and p:IsA("BasePart") then return p end
+	end
+	return nil
 end
 
 local function getChestPart(model)
-    return findPart(model, {"UpperTorso", "Torso", "LowerTorso"})
+	return findPart(model, {"UpperTorso", "Torso", "LowerTorso"})
 end
 
 local function getAimModeForSource(source)
-    local map = Config.AimPointBySource
-    if not map then return "Root" end
-    return map[source] or map.default or "Root"
+	local map = Config.AimPointBySource
+	if not map then return "Root" end
+	return map[source] or map.default or "Root"
 end
 
 local function getAimOffsetForSource(source)
-    local map = Config.AimOffsetBySource
-    if not map then return 0 end
-    local v = map[source]
-    if v == nil then v = map.default end
-    return v or 0
+	local map = Config.AimOffsetBySource
+	if not map then return 0 end
+	local v = map[source]
+	if v == nil then v = map.default end
+	return v or 0
 end
 
 local function getAimWorldPosition(model, hrp, source)
-    local mode = getAimModeForSource(source)
-    local dist = getAimOffsetForSource(source)
-    local cf = hrp.CFrame
-    local pos = hrp.Position
-    if mode == "Torso" or mode == "Chest" or mode == "Body" then
-        local torso = getChestPart(model)
-        if torso then return torso.Position end
-        return pos
-    end
-    if mode == "Root" then
-        return pos
-    elseif mode == "Head" then
-        local head = findPart(model, {"Head"})
-        return head and head.Position or (pos + Vector3.new(0, 1.5, 0))
-    elseif mode == "AboveHead" then
-        local head = findPart(model, {"Head"})
-        local base = head and head.Position or (pos + Vector3.new(0, 1.5, 0))
-        local extra = (dist ~= 0 and dist) or (Config.AboveHeadHeight or 1.2)
-        return base + Vector3.new(0, extra, 0)
-    elseif mode == "Front" then
-        local base = getChestPart(model) or hrp
-        return base.Position + base.CFrame.LookVector * dist
-    elseif mode == "Back" then
-        local base = getChestPart(model) or hrp
-        return base.Position - base.CFrame.LookVector * dist
-    elseif mode == "Left" then
-        local base = getChestPart(model) or hrp
-        return base.Position - base.CFrame.RightVector * dist
-    elseif mode == "Right" then
-        local base = getChestPart(model) or hrp
-        return base.Position + base.CFrame.RightVector * dist
-    elseif mode == "LeftArm" then
-        local arm = findPart(model, {"LeftHand", "Left Arm", "LeftLowerArm", "LeftUpperArm"})
-        return arm and arm.Position or (pos - cf.RightVector * math.max(dist, 1.2))
-    elseif mode == "RightArm" then
-        local arm = findPart(model, {"RightHand", "Right Arm", "RightLowerArm", "RightUpperArm"})
-        return arm and arm.Position or (pos + cf.RightVector * math.max(dist, 1.2))
-    end
-    return pos
+	local mode = getAimModeForSource(source)
+	local dist = getAimOffsetForSource(source)
+	local cf = hrp.CFrame
+	local pos = hrp.Position
+	if mode == "Torso" or mode == "Chest" or mode == "Body" then
+		local torso = getChestPart(model)
+		if torso then return torso.Position end
+		return pos
+	end
+	if mode == "Root" then
+		return pos
+	elseif mode == "Head" then
+		local head = findPart(model, {"Head"})
+		return head and head.Position or (pos + Vector3.new(0, 1.5, 0))
+	elseif mode == "AboveHead" then
+		local head = findPart(model, {"Head"})
+		local base = head and head.Position or (pos + Vector3.new(0, 1.5, 0))
+		local extra = (dist ~= 0 and dist) or (Config.AboveHeadHeight or 1.2)
+		return base + Vector3.new(0, extra, 0)
+	elseif mode == "Front" then
+		local base = getChestPart(model) or hrp
+		return base.Position + base.CFrame.LookVector * dist
+	elseif mode == "Back" then
+		local base = getChestPart(model) or hrp
+		return base.Position - base.CFrame.LookVector * dist
+	elseif mode == "Left" then
+		local base = getChestPart(model) or hrp
+		return base.Position - base.CFrame.RightVector * dist
+	elseif mode == "Right" then
+		local base = getChestPart(model) or hrp
+		return base.Position + base.CFrame.RightVector * dist
+	elseif mode == "LeftArm" then
+		local arm = findPart(model, {"LeftHand", "Left Arm", "LeftLowerArm", "LeftUpperArm"})
+		return arm and arm.Position or (pos - cf.RightVector * math.max(dist, 1.2))
+	elseif mode == "RightArm" then
+		local arm = findPart(model, {"RightHand", "Right Arm", "RightLowerArm", "RightUpperArm"})
+		return arm and arm.Position or (pos + cf.RightVector * math.max(dist, 1.2))
+	end
+	return pos
 end
 
 local function getPingSec()
-    local ok, v = pcall(function()
-        return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
-    end)
-    if ok and typeof(v) == "number" then return v / 1000 end
-    return 0.011
+	local ok, v = pcall(function()
+		return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+	end)
+	if ok and typeof(v) == "number" then return v / 1000 end
+	return 0.011
 end
 
 local function getHistoryVelocity(model, hrp, dt)
-    local now = tick()
-    local entry = targetHistory[model]
-    if not entry then
-        targetHistory[model] = {pos = hrp.Position, t = now, vel = Vector3.zero}
-        return Vector3.zero
-    end
-    local deltaPos = hrp.Position - entry.pos
-    local deltaT = math.max(now - entry.t, 1/240)
-    if deltaPos.Magnitude > 120 then
-        targetHistory[model] = {pos = hrp.Position, t = now, vel = entry.vel}
-        return entry.vel
-    end
-    local rawVel = deltaPos / deltaT
-    local smoothed = entry.vel:Lerp(rawVel, math.clamp(dt * Config.PredictionHistorySmoothing, 0, 1))
-    targetHistory[model] = {pos = hrp.Position, t = now, vel = smoothed}
-    return smoothed
+	local now = tick()
+	local entry = targetHistory[model]
+	if not entry then
+		targetHistory[model] = {pos = hrp.Position, t = now, vel = Vector3.zero}
+		return Vector3.zero
+	end
+	local deltaPos = hrp.Position - entry.pos
+	local deltaT = math.max(now - entry.t, 1/240)
+	if deltaPos.Magnitude > 120 then
+		targetHistory[model] = {pos = hrp.Position, t = now, vel = entry.vel}
+		return entry.vel
+	end
+	local rawVel = deltaPos / deltaT
+	local smoothed = entry.vel:Lerp(rawVel, math.clamp(dt * Config.PredictionHistorySmoothing, 0, 1))
+	targetHistory[model] = {pos = hrp.Position, t = now, vel = smoothed}
+	return smoothed
 end
 
 local function applyVelocityPrediction(worldPos, hrp, model, dt)
-    if not Config.UsePrediction then return worldPos end
-    if not model or not hrp then return worldPos end
-    local vel = getHistoryVelocity(model, hrp, dt)
-    if vel.Magnitude < 2 then return worldPos end
-    if vel.Magnitude > Config.PredictionMaxSpeed then
-        vel = vel.Unit * Config.PredictionMaxSpeed
-    end
-    local ping = Config.UsePingCompensation and getPingSec() or 0
-    local strength = Config.PredictionStrength + ping * Config.PingCompensationMultiplier
-    return worldPos + vel * strength
+	if not Config.UsePrediction then return worldPos end
+	if not model or not hrp then return worldPos end
+	local vel = getHistoryVelocity(model, hrp, dt)
+	if vel.Magnitude < 2 then return worldPos end
+	if vel.Magnitude > Config.PredictionMaxSpeed then
+		vel = vel.Unit * Config.PredictionMaxSpeed
+	end
+	local ping = Config.UsePingCompensation and getPingSec() or 0
+	local strength = Config.PredictionStrength + ping * Config.PingCompensationMultiplier
+	return worldPos + vel * strength
 end
 
 local function smoothAim(model, aimPos)
-    local alpha = Config.AimSmooth or 0
-    if alpha <= 0 or alpha >= 0.999 then
-        smoothedAimPos = aimPos
-        smoothedAimTarget = model
-        return aimPos
-    end
-    if smoothedAimTarget ~= model or not smoothedAimPos then
-        smoothedAimPos = aimPos
-        smoothedAimTarget = model
-        return aimPos
-    end
-    smoothedAimPos = smoothedAimPos:Lerp(aimPos, math.clamp(alpha, 0.05, 1))
-    return smoothedAimPos
+	local alpha = Config.AimSmooth or 0
+	if alpha <= 0 or alpha >= 0.999 then
+		smoothedAimPos = aimPos
+		smoothedAimTarget = model
+		return aimPos
+	end
+	if smoothedAimTarget ~= model or not smoothedAimPos then
+		smoothedAimPos = aimPos
+		smoothedAimTarget = model
+		return aimPos
+	end
+	smoothedAimPos = smoothedAimPos:Lerp(aimPos, math.clamp(alpha, 0.05, 1))
+	return smoothedAimPos
 end
 
 local function scoreTarget(model, dist)
-    local score = dist
-    if Config.TargetPriority == "Players" then
-        if isPlayerCharacter(model) then score -= 10000 end
-    elseif Config.TargetPriority == "NPC" then
-        if not isPlayerCharacter(model) then score -= 10000 end
-    end
-    return score
+	local score = dist
+	if Config.TargetPriority == "Players" then
+		if isPlayerCharacter(model) then score -= 10000 end
+	elseif Config.TargetPriority == "NPC" then
+		if not isPlayerCharacter(model) then score -= 10000 end
+	end
+	return score
 end
 
 local function considerTarget(model, myPos, best, bestScore)
-    if not isValidTarget(model) then return best, bestScore end
-    local hrp = getRoot(model)
-    if not hrp then return best, bestScore end
-    local dist = (myPos - hrp.Position).Magnitude
-    if not isWithinDistance(dist) or not isInFront(hrp) then return best, bestScore end
-    local s = scoreTarget(model, dist)
-    if s < bestScore then return model, s end
-    return best, bestScore
+	if not isValidTarget(model) then return best, bestScore end
+	local hrp = getRoot(model)
+	if not hrp then return best, bestScore end
+	local dist = (myPos - hrp.Position).Magnitude
+	if not isWithinDistance(dist) or not isInFront(hrp) then return best, bestScore end
+	local s = scoreTarget(model, dist)
+	if s < bestScore then return model, s end
+	return best, bestScore
 end
 
 local function scanForTargets(parent, myPos, best, bestScore, depth)
-    if depth > 5 or not parent or IGNORE_FOLDERS[parent.Name] then return best, bestScore end
-    local ok, children = pcall(function() return parent:GetChildren() end)
-    if not ok or not children then return best, bestScore end
-    for _, child in ipairs(children) do
-        if child:IsA("Model") and child ~= character then
-            best, bestScore = considerTarget(child, myPos, best, bestScore)
-            best, bestScore = scanForTargets(child, myPos, best, bestScore, depth + 1)
-        elseif child:IsA("Folder") or child:IsA("Configuration") or child:IsA("WorldModel") then
-            if not IGNORE_FOLDERS[child.Name] then
-                best, bestScore = scanForTargets(child, myPos, best, bestScore, depth + 1)
-            end
-        end
-    end
-    return best, bestScore
+	if depth > 5 or not parent or IGNORE_FOLDERS[parent.Name] then return best, bestScore end
+	local ok, children = pcall(function() return parent:GetChildren() end)
+	if not ok or not children then return best, bestScore end
+	for _, child in ipairs(children) do
+		if child:IsA("Model") and child ~= character then
+			best, bestScore = considerTarget(child, myPos, best, bestScore)
+			best, bestScore = scanForTargets(child, myPos, best, bestScore, depth + 1)
+		elseif child:IsA("Folder") or child:IsA("Configuration") or child:IsA("WorldModel") then
+			if not IGNORE_FOLDERS[child.Name] then
+				best, bestScore = scanForTargets(child, myPos, best, bestScore, depth + 1)
+			end
+		end
+	end
+	return best, bestScore
 end
 
 local function getClosestTarget()
-    if not rootPart or not rootPart.Parent then return nil end
-    local myPos = rootPart.Position
-    local best, bestScore = nil, math.huge
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            best, bestScore = considerTarget(p.Character, myPos, best, bestScore)
-        end
-    end
-    if best and (bestScore < 200) then
-        return best
-    end
-    local folders = {
-        workspace:FindFirstChild("Characters"),
-        workspace:FindFirstChild("Live"),
-        workspace:FindFirstChild("Entities"),
-        workspace:FindFirstChild("Mobs"),
-        workspace:FindFirstChild("NPCs"),
-        workspace:FindFirstChild("Units"),
-        workspace:FindFirstChild("Dummy"),
-        workspace:FindFirstChild("Dummies"),
-    }
-    for _, folder in ipairs(folders) do
-        if folder then
-            best, bestScore = scanForTargets(folder, myPos, best, bestScore, 0)
-        end
-    end
-    best, bestScore = scanForTargets(workspace, myPos, best, bestScore, 0)
-    return best
+	if not rootPart or not rootPart.Parent then return nil end
+	local myPos = rootPart.Position
+	local best, bestScore = nil, math.huge
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			best, bestScore = considerTarget(p.Character, myPos, best, bestScore)
+		end
+	end
+	if best and isPlayerCharacter(best) then
+		return best
+	end
+
+	local folders = {
+		workspace:FindFirstChild("Characters"),
+		workspace:FindFirstChild("Live"),
+		workspace:FindFirstChild("Entities"),
+		workspace:FindFirstChild("Mobs"),
+		workspace:FindFirstChild("NPCs"),
+		workspace:FindFirstChild("Units"),
+		workspace:FindFirstChild("Dummy"),
+		workspace:FindFirstChild("Dummies"),
+	}
+	for _, folder in ipairs(folders) do
+		if folder then
+			best, bestScore = scanForTargets(folder, myPos, best, bestScore, 0)
+		end
+	end
+	best, bestScore = scanForTargets(workspace, myPos, best, bestScore, 0)
+	return best
 end
 
 local function getTargetUnderMouse(maxDistance, aimRadiusPx)
-    if not rootPart or not rootPart.Parent then return nil end
-    local aim2D
-    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-        aim2D = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-    else
-        aim2D = UserInputService:GetMouseLocation()
-    end
-    local best, bestScore = nil, aimRadiusPx or 220
-    local myPos = rootPart.Position
-    local maxDist = maxDistance or Config.MaxLockDistance
-    local function consider(model)
-        if not isValidTarget(model) then return end
-        local hrp = getRoot(model)
-        if not hrp then return end
-        local worldDist = (myPos - hrp.Position).Magnitude
-        if not isWithinDistance(worldDist) or worldDist > maxDist or not isInFront(hrp) then return end
-        local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
-        if not onScreen then return end
-        local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - aim2D).Magnitude
-        if dist2D < bestScore then
-            bestScore, best = dist2D, model
-        end
-    end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            consider(p.Character)
-        end
-    end
-    local function scanMouse(parent, depth)
-        if depth > 5 or not parent or IGNORE_FOLDERS[parent.Name] then return end
-        local ok, children = pcall(function() return parent:GetChildren() end)
-        if not ok or not children then return end
-        for _, child in ipairs(children) do
-            if child:IsA("Model") then
-                consider(child)
-                scanMouse(child, depth + 1)
-            elseif child:IsA("Folder") or child:IsA("Configuration") then
-                scanMouse(child, depth + 1)
-            end
-        end
-    end
-    local chars = workspace:FindFirstChild("Characters")
-    if chars then scanMouse(chars, 0) end
-    scanMouse(workspace, 0)
-    return best
+	if not rootPart or not rootPart.Parent then return nil end
+	local aim2D
+	if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+		aim2D = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+	else
+		aim2D = UserInputService:GetMouseLocation()
+	end
+	local best, bestScore = nil, aimRadiusPx or 220
+	local myPos = rootPart.Position
+	local maxDist = maxDistance or Config.MaxLockDistance
+
+	local function consider(model)
+		if not isValidTarget(model) then return end
+		local hrp = getRoot(model)
+		if not hrp then return end
+		local worldDist = (myPos - hrp.Position).Magnitude
+		if not isWithinDistance(worldDist) or worldDist > maxDist or not isInFront(hrp) then return end
+		local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+		if not onScreen then return end
+		local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - aim2D).Magnitude
+		if dist2D < bestScore then
+			bestScore, best = dist2D, model
+		end
+	end
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			consider(p.Character)
+		end
+	end
+	if best and isPlayerCharacter(best) then
+		return best
+	end
+
+	local function scanMouse(parent, depth)
+		if depth > 5 or not parent or IGNORE_FOLDERS[parent.Name] then return end
+		local ok, children = pcall(function() return parent:GetChildren() end)
+		if not ok or not children then return end
+		for _, child in ipairs(children) do
+			if child:IsA("Model") then
+				consider(child)
+				scanMouse(child, depth + 1)
+			elseif child:IsA("Folder") or child:IsA("Configuration") then
+				if not IGNORE_FOLDERS[child.Name] then
+					scanMouse(child, depth + 1)
+				end
+			end
+		end
+	end
+	local chars = workspace:FindFirstChild("Characters")
+	if chars then scanMouse(chars, 0) end
+	scanMouse(workspace, 0)
+	return best
 end
 
 local function tryActivateLock(source)
-    if not lockEnabled or isSelfRagdolled(true) then return false end
-    local target
-    if stickyTarget and isValidTarget(stickyTarget) then
-        target = stickyTarget
-    elseif priorityTarget and isValidTarget(priorityTarget) then
-        local hrp = getRoot(priorityTarget)
-        if hrp and isWithinDistance((rootPart.Position - hrp.Position).Magnitude) and isInFront(hrp) then
-            target = priorityTarget
-        end
-    end
-    target = target or getClosestTarget()
-    if not target then return false end
-    lockedTarget = target
-    currentLockSource = source or "skill"
-    if humanoid then humanoid.AutoRotate = false end
-    watchTargetForGrab(target)
-    return true
+	if not lockEnabled or isSelfRagdolled(true) then return false end
+	local target
+	if stickyTarget and isValidTarget(stickyTarget) then
+		target = stickyTarget
+	elseif priorityTarget and isValidTarget(priorityTarget) then
+		local hrp = getRoot(priorityTarget)
+		if hrp and isWithinDistance((rootPart.Position - hrp.Position).Magnitude) and isInFront(hrp) then
+			target = priorityTarget
+		end
+	end
+	target = target or getClosestTarget()
+	if not target then return false end
+	lockedTarget = target
+	currentLockSource = source or "skill"
+	if humanoid then humanoid.AutoRotate = false end
+	watchTargetForGrab(target)
+	return true
 end
 
 local function shouldRetarget()
-    if stickyTarget and isValidTarget(stickyTarget) then return false end
-    if priorityTarget and isValidTarget(priorityTarget) then return false end
-    if currentLockSource == "block" then return Config.BlockRetargetClosest end
-    if currentLockSource == "skill" then return Config.SkillRetargetClosest end
-    if currentLockSource == "mouse" then return Config.MouseRetargetClosest end
-    return false
+	if stickyTarget and isValidTarget(stickyTarget) then return false end
+	if priorityTarget and isValidTarget(priorityTarget) then return false end
+	if currentLockSource == "block" then return Config.BlockRetargetClosest end
+	if currentLockSource == "skill" then return Config.SkillRetargetClosest end
+	if currentLockSource == "mouse" then return Config.MouseRetargetClosest end
+	return false
 end
 
 local function isActivelyHolding()
-    if isHoldingMouse then return true end
-    if activeLockKey ~= nil then
-        -- Still physically held? (guards against missed InputEnded / game sinking keys)
-        if UserInputService:IsKeyDown(activeLockKey) then
-            return true
-        end
-        return true -- key marked active until InputEnded clears it
-    end
-    -- Fallback: any configured lock key currently down
-    for _, k in ipairs(Config.LockKeys) do
-        if UserInputService:IsKeyDown(k) then
-            return true
-        end
-    end
-    if Config.UseMouseButton1 and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-        return true
-    end
-    return false
+	if isHoldingMouse then return true end
+	if activeLockKey ~= nil then
+		if UserInputService:IsKeyDown(activeLockKey) then
+			return true
+		end
+		return true
+	end
+	for _, k in ipairs(Config.LockKeys) do
+		if UserInputService:IsKeyDown(k) then
+			return true
+		end
+	end
+	if Config.UseMouseButton1 and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+		return true
+	end
+	return false
 end
 
 local function isAerialState(state)
-    return state == Enum.HumanoidStateType.Freefall
-        or state == Enum.HumanoidStateType.Flying
-        or state == Enum.HumanoidStateType.Jumping
-        or state == Enum.HumanoidStateType.PlatformStanding
+	return state == Enum.HumanoidStateType.Freefall
+		or state == Enum.HumanoidStateType.Flying
+		or state == Enum.HumanoidStateType.Jumping
+		or state == Enum.HumanoidStateType.PlatformStanding
 end
 
 local function teleportBehindTarget(target)
-    if not rootPart or not target or not isValidTarget(target) then return end
-    local tRoot = getRoot(target)
-    if not tRoot then return end
-    local cfg = Config.Skill3BehindTP
-    local behindPos = tRoot.Position - tRoot.CFrame.LookVector * (cfg.Distance or 3.2)
-        + Vector3.new(0, cfg.Height or 0, 0)
-    local goalCF
-    if cfg.FaceTarget ~= false then
-        goalCF = CFrame.lookAt(behindPos, tRoot.Position)
-    else
-        goalCF = CFrame.new(behindPos) * (rootPart.CFrame - rootPart.CFrame.Position)
-    end
-    local smooth = cfg.Smooth or 0
-    if smooth <= 0 then
-        rootPart.CFrame = goalCF
-    else
-        isTeleporting = true
-        local tw = TweenService:Create(rootPart, TweenInfo.new(smooth, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            CFrame = goalCF
-        })
-        tw:Play()
-        tw.Completed:Connect(function() isTeleporting = false end)
-    end
+	if not rootPart or not target or not isValidTarget(target) then return end
+	local tRoot = getRoot(target)
+	if not tRoot then return end
+	local cfg = Config.Skill3BehindTP
+	local behindPos = tRoot.Position - tRoot.CFrame.LookVector * (cfg.Distance or 3.2)
+		+ Vector3.new(0, cfg.Height or 0, 0)
+	local goalCF
+	if cfg.FaceTarget ~= false then
+		goalCF = CFrame.lookAt(behindPos, tRoot.Position)
+	else
+		goalCF = CFrame.new(behindPos) * (rootPart.CFrame - rootPart.CFrame.Position)
+	end
+	local smooth = cfg.Smooth or 0
+	if smooth <= 0 then
+		rootPart.CFrame = goalCF
+	else
+		isTeleporting = true
+		local tw = TweenService:Create(rootPart, TweenInfo.new(smooth, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			CFrame = goalCF
+		})
+		tw:Play()
+		tw.Completed:Connect(function() isTeleporting = false end)
+	end
 end
 
 local function scheduleSkill3BehindTP()
-    local cfg = Config.Skill3BehindTP
-    if not cfg or not cfg.Enabled then return end
-    skill3TPToken += 1
-    local token = skill3TPToken
-    task.delay(cfg.Delay or 0.15, function()
-        if token ~= skill3TPToken then return end
-        if not lockEnabled or not rootPart then return end
-        local target = lockedTarget
-        if stickyTarget and isValidTarget(stickyTarget) then
-            target = stickyTarget
-        end
-        if target and isValidTarget(target) then
-            teleportBehindTarget(target)
-        end
-    end)
+	local cfg = Config.Skill3BehindTP
+	if not cfg or not cfg.Enabled then return end
+	skill3TPToken += 1
+	local token = skill3TPToken
+	task.delay(cfg.Delay or 0.15, function()
+		if token ~= skill3TPToken then return end
+		if not lockEnabled or not rootPart then return end
+		local target = lockedTarget
+		if stickyTarget and isValidTarget(stickyTarget) then
+			target = stickyTarget
+		end
+		if target and isValidTarget(target) then
+			teleportBehindTarget(target)
+		end
+	end)
 end
 
 local function trySmoothBehind()
-    if not Config.EnableTeleport or isTeleporting then return end
-    if tick() - lastBehindTime < Config.BehindCooldown then return end
-    if not rootPart or not lockedTarget or not isValidTarget(lockedTarget) then return end
-    local tRoot = getRoot(lockedTarget)
-    if not tRoot then return end
-    if (rootPart.Position - tRoot.Position).Magnitude > Config.CloseTeleportRange then return end
-    local behindPos = tRoot.Position - tRoot.CFrame.LookVector * Config.BehindDistance
-        + Vector3.new(0, Config.BehindHeight, 0)
-    isTeleporting = true
-    lastBehindTime = tick()
-    local tween = TweenService:Create(rootPart, TweenInfo.new(Config.BehindSmoothTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        CFrame = CFrame.lookAt(behindPos, tRoot.Position)
-    })
-    tween:Play()
-    tween.Completed:Connect(function() isTeleporting = false end)
+	if not Config.EnableTeleport or isTeleporting then return end
+	if tick() - lastBehindTime < Config.BehindCooldown then return end
+	if not rootPart or not lockedTarget or not isValidTarget(lockedTarget) then return end
+	local tRoot = getRoot(lockedTarget)
+	if not tRoot then return end
+	if (rootPart.Position - tRoot.Position).Magnitude > Config.CloseTeleportRange then return end
+	local behindPos = tRoot.Position - tRoot.CFrame.LookVector * Config.BehindDistance
+		+ Vector3.new(0, Config.BehindHeight, 0)
+	isTeleporting = true
+	lastBehindTime = tick()
+	local tween = TweenService:Create(rootPart, TweenInfo.new(Config.BehindSmoothTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		CFrame = CFrame.lookAt(behindPos, tRoot.Position)
+	})
+	tween:Play()
+	tween.Completed:Connect(function() isTeleporting = false end)
 end
 
 local function isLockKey(key)
-    if key == (Config.BlockKey or Enum.KeyCode.F) then return true end
-    for _, k in ipairs(Config.LockKeys) do
-        if k == key then return true end
-    end
-    return false
+	if key == (Config.BlockKey or Enum.KeyCode.F) then return true end
+	for _, k in ipairs(Config.LockKeys) do
+		if k == key then return true end
+	end
+	return false
 end
 
 local function isBlockKey(key)
-    return key == (Config.BlockKey or Enum.KeyCode.F)
+	return key == (Config.BlockKey or Enum.KeyCode.F)
 end
 
 local function isPriorityKey(key)
-    if key == Config.PriorityKey then return true end
-    if Config.PriorityAlsoRightAlt and key == Enum.KeyCode.RightAlt then return true end
-    return false
+	if key == Config.PriorityKey then return true end
+	if Config.PriorityAlsoRightAlt and key == Enum.KeyCode.RightAlt then return true end
+	return false
 end
 
 local function resolveAimSource()
-    if stickyTarget then
-        if isActivelyHolding() then
-            return currentLockSource or "skill"
-        elseif lockExpireTime > 0 and tick() < lockExpireTime then
-            return currentLockSource or "sticky"
-        end
-        return "sticky"
-    end
-    return currentLockSource or "default"
+	if stickyTarget then
+		if isActivelyHolding() then
+			return currentLockSource or "skill"
+		elseif lockExpireTime > 0 and tick() < lockExpireTime then
+			return currentLockSource or "sticky"
+		end
+		return "sticky"
+	end
+	return currentLockSource or "default"
 end
 
 local function applyRotation(goal, flatLook, flatTo, dt, angleDeg)
-    setRotateEnabled(false)
-    if Config.UseSmoothTurn then
-        local alpha = 1 - math.exp(-dt / math.max(Config.Smoothness, 0.01))
-        rootPart.CFrame = rootPart.CFrame:Lerp(goal, math.clamp(alpha, 0, 1))
-    else
-        rootPart.CFrame = goal
-    end
+	setRotateEnabled(false)
+	if Config.UseSmoothTurn then
+		local alpha = 1 - math.exp(-dt / math.max(Config.Smoothness, 0.01))
+		rootPart.CFrame = rootPart.CFrame:Lerp(goal, math.clamp(alpha, 0, 1))
+	else
+		rootPart.CFrame = goal
+	end
 end
 
 -- ======================================================
@@ -991,1425 +1026,1377 @@ end
 local onLockEnabledChanged
 
 local function setLockEnabled(v)
-    lockEnabled = v
-    if not lockEnabled then
-        hardClearLock()
-        clearSticky()
-        skill3TPToken += 1
-        if humanoid and humanoid.Parent then
-            pcall(function() humanoid.AutoRotate = true end)
-        end
-    else
-        if humanoid and humanoid.Parent then
-            pcall(function() humanoid.AutoRotate = false end)
-        end
-    end
-    if onLockEnabledChanged then
-        onLockEnabledChanged(lockEnabled)
-    end
+	lockEnabled = v
+	if not lockEnabled then
+		hardClearLock()
+		clearSticky()
+		skill3TPToken += 1
+		if humanoid and humanoid.Parent then
+			pcall(function() humanoid.AutoRotate = true end)
+		end
+	else
+		if humanoid and humanoid.Parent then
+			pcall(function() humanoid.AutoRotate = false end)
+		end
+	end
+	if onLockEnabledChanged then
+		onLockEnabledChanged(lockEnabled)
+	end
 end
 
 -- ======================================================
 -- INPUTS
 -- ======================================================
 UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if turboPanicked then return end
-    if input.KeyCode == Config.ToggleKey then
-        return
-    end
-    if input.KeyCode == Config.EnableLockKey then
-        setLockEnabled(not lockEnabled)
-        return
-    end
-    if not lockEnabled or isSelfRagdolled(true) then return end
-    if input.KeyCode == Config.StickyLockKey then
-        if stickyTarget and isValidTarget(stickyTarget) then
-            clearSticky()
-            if not activeLockKey and not isHoldingMouse and (not lockExpireTime or lockExpireTime <= 0) then
-                lockedTarget = nil
-                setRotateEnabled(false)
-                if humanoid then humanoid.AutoRotate = true end
-            end
-            print("Sticky OFF")
-            return
-        end
-        local target = getTargetUnderMouse(Config.PriorityMaxDistance, Config.PriorityAimRadiusPx)
-        if not target then
-            print("Nenhum alvo sob o mouse")
-            return
-        end
-        stickyTarget = target
-        lockedTarget = target
-        currentLockSource = "sticky"
-        smoothedAimPos, smoothedAimTarget = nil, nil
-        if humanoid then humanoid.AutoRotate = false end
-        watchTargetForGrab(target)
-        print("Sticky ON -> " .. target.Name)
-        return
-    end
-    if isPriorityKey(input.KeyCode) then
-        if priorityTarget and isValidTarget(priorityTarget) then
-            clearPriority()
-            return
-        end
-        local target = getTargetUnderMouse(Config.PriorityMaxDistance, Config.PriorityAimRadiusPx)
-        if target then
-            priorityTarget = target
-            lockedTarget = target
-            currentLockSource = "priority"
-            if humanoid then humanoid.AutoRotate = false end
-            watchTargetForGrab(target)
-            lockExpireTime = tick() + 0.4
-            activeLockKey = nil
-        end
-        return
-    end
-    if isLockKey(input.KeyCode) then
-        activeLockKey = input.KeyCode
-        lockStartTime = tick()
-        lockExpireTime = 0
-        currentLockSource = isBlockKey(input.KeyCode) and "block" or "skill"
-        tryActivateLock(currentLockSource)
-        local s3 = Config.Skill3BehindTP
-        if s3 and s3.Enabled and input.KeyCode == (s3.Key or Enum.KeyCode.Three) then
-            scheduleSkill3BehindTP()
-        end
-        return
-    end
-    if Config.UseMouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1 then
-        isHoldingMouse = true
-        mousePressTime = tick()
-        lockExpireTime = 0
-        tryActivateLock("mouse")
-        return
-    end
-    if input.KeyCode == Config.BehindKey then
-        isHoldingQ = true
-        qHoldStart = tick()
-        qLocked = false
-    end
+	if processed then return end
+	if turboPanicked then return end
+	if input.KeyCode == Config.ToggleKey then
+		return
+	end
+	if input.KeyCode == Config.EnableLockKey then
+		setLockEnabled(not lockEnabled)
+		return
+	end
+	if not lockEnabled or isSelfRagdolled(true) then return end
+	if input.KeyCode == Config.StickyLockKey then
+		if stickyTarget and isValidTarget(stickyTarget) then
+			clearSticky()
+			if not activeLockKey and not isHoldingMouse and (not lockExpireTime or lockExpireTime <= 0) then
+				lockedTarget = nil
+				setRotateEnabled(false)
+				if humanoid then humanoid.AutoRotate = true end
+			end
+			print("Sticky OFF")
+			return
+		end
+		local target = getTargetUnderMouse(Config.PriorityMaxDistance, Config.PriorityAimRadiusPx)
+		if not target then
+			print("Nenhum alvo sob o mouse")
+			return
+		end
+		stickyTarget = target
+		lockedTarget = target
+		currentLockSource = "sticky"
+		smoothedAimPos, smoothedAimTarget = nil, nil
+		if humanoid then humanoid.AutoRotate = false end
+		watchTargetForGrab(target)
+		print("Sticky ON -> " .. target.Name)
+		return
+	end
+	if isPriorityKey(input.KeyCode) then
+		if priorityTarget and isValidTarget(priorityTarget) then
+			clearPriority()
+			return
+		end
+		local target = getTargetUnderMouse(Config.PriorityMaxDistance, Config.PriorityAimRadiusPx)
+		if target then
+			priorityTarget = target
+			lockedTarget = target
+			currentLockSource = "priority"
+			if humanoid then humanoid.AutoRotate = false end
+			watchTargetForGrab(target)
+			lockExpireTime = tick() + 0.4
+			activeLockKey = nil
+		end
+		return
+	end
+	if isLockKey(input.KeyCode) then
+		activeLockKey = input.KeyCode
+		lockStartTime = tick()
+		lockExpireTime = 0
+		currentLockSource = isBlockKey(input.KeyCode) and "block" or "skill"
+		tryActivateLock(currentLockSource)
+		local s3 = Config.Skill3BehindTP
+		if s3 and s3.Enabled and input.KeyCode == (s3.Key or Enum.KeyCode.Three) then
+			scheduleSkill3BehindTP()
+		end
+		return
+	end
+	if Config.UseMouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1 then
+		isHoldingMouse = true
+		mousePressTime = tick()
+		lockExpireTime = 0
+		tryActivateLock("mouse")
+		return
+	end
+	if input.KeyCode == Config.BehindKey then
+		isHoldingQ = true
+		qHoldStart = tick()
+		qLocked = false
+	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if turboPanicked then return end
+	if turboPanicked then return end
 
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if isHoldingMouse then
-            local held = tick() - (mousePressTime > 0 and mousePressTime or tick())
-            isHoldingMouse = false
-            if lockEnabled then
-                -- Hold: release stops lock. Click (short): keep lock for Click duration.
-                local threshold = tonumber(Config.MouseHoldThreshold) or 0.14
-                if held >= threshold then
-                    if not stickyTarget then hardClearLock() end
-                    activeLockKey = nil
-                    lockExpireTime = 0
-                else
-                    lockExpireTime = tick() + (tonumber(Config.MouseClickLockDuration) or 0.25)
-                    currentLockSource = "mouse"
-                end
-            end
-        end
-        return
-    end
-    if not lockEnabled then return end
-    if input.KeyCode == Config.StickyLockKey then return end
-    if isPriorityKey(input.KeyCode) then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if isHoldingMouse then
+			local held = tick() - (mousePressTime > 0 and mousePressTime or tick())
+			isHoldingMouse = false
+			if lockEnabled then
+				local threshold = tonumber(Config.MouseHoldThreshold) or 0.14
+				if held >= threshold then
+					if not stickyTarget then hardClearLock() end
+					activeLockKey = nil
+					lockExpireTime = 0
+				else
+					lockExpireTime = tick() + (tonumber(Config.MouseClickLockDuration) or 0.25)
+					currentLockSource = "mouse"
+				end
+			end
+		end
+		return
+	end
+	if not lockEnabled then return end
+	if input.KeyCode == Config.StickyLockKey then return end
+	if isPriorityKey(input.KeyCode) then return end
 
-    -- Skill / lock keys: measure real hold time
-    if activeLockKey and activeLockKey == input.KeyCode then
-        local start = (lockStartTime > 0) and lockStartTime or tick()
-        local held = tick() - start
-        local threshold = tonumber(Config.HoldThreshold) or 0.14
-        activeLockKey = nil
-        if held >= threshold then
-            -- Held long enough → treat as hold, clear on release
-            if not stickyTarget then hardClearLock() end
-            lockExpireTime = 0
-        else
-            -- Short tap → keep aiming for ClickLockDuration
-            lockExpireTime = tick() + (tonumber(Config.ClickLockDuration) or 0.32)
-        end
-        return
-    end
+	if activeLockKey and activeLockKey == input.KeyCode then
+		local start = (lockStartTime > 0) and lockStartTime or tick()
+		local held = tick() - start
+		local threshold = tonumber(Config.HoldThreshold) or 0.14
+		activeLockKey = nil
+		if held >= threshold then
+			if not stickyTarget then hardClearLock() end
+			lockExpireTime = 0
+		else
+			lockExpireTime = tick() + (tonumber(Config.ClickLockDuration) or 0.32)
+		end
+		return
+	end
 
-    -- Also handle lock key release even if activeLockKey was lost
-    if isLockKey(input.KeyCode) then
-        local start = (lockStartTime > 0) and lockStartTime or tick()
-        local held = tick() - start
-        local threshold = tonumber(Config.HoldThreshold) or 0.14
-        if held >= threshold then
-            if not stickyTarget and not isHoldingMouse then
-                hardClearLock()
-            end
-            lockExpireTime = 0
-        elseif lockEnabled and lockedTarget then
-            lockExpireTime = tick() + (tonumber(Config.ClickLockDuration) or 0.32)
-        end
-        return
-    end
+	if isLockKey(input.KeyCode) then
+		local start = (lockStartTime > 0) and lockStartTime or tick()
+		local held = tick() - start
+		local threshold = tonumber(Config.HoldThreshold) or 0.14
+		if held >= threshold then
+			if not stickyTarget and not isHoldingMouse then
+				hardClearLock()
+			end
+			lockExpireTime = 0
+		elseif lockEnabled and lockedTarget then
+			lockExpireTime = tick() + (tonumber(Config.ClickLockDuration) or 0.32)
+		end
+		return
+	end
 
-    if input.KeyCode == Config.BehindKey then
-        isHoldingQ, qLocked = false, false
-    end
+	if input.KeyCode == Config.BehindKey then
+		isHoldingQ, qLocked = false, false
+	end
 end)
 
 -- ======================================================
 -- NUCLEO TRIPLO INSTANTANEO
 -- ======================================================
 local function doLock(dt)
-    if turboPanicked then return end
-    if not lockEnabled or not rootPart or not humanoid or not humanoid.Parent then return end
-    if isSelfRagdolled() then
-        if lockedTarget and not stickyTarget then hardClearLock() end
-        setRotateEnabled(false)
-        return
-    end
-    local currentState = humanoid:GetState()
-    local velocity = rootPart.AssemblyLinearVelocity.Magnitude
-    local aerial = isAerialState(currentState)
-    if lastState then
-        local wasAerial = isAerialState(lastState)
-        local nowNormal = currentState == Enum.HumanoidStateType.Running
-            or currentState == Enum.HumanoidStateType.Landed
-            or currentState == Enum.HumanoidStateType.RunningNoPhysics
-            or currentState == Enum.HumanoidStateType.GettingUp
-        if wasAerial and nowNormal then
-            disableUntil = 0
-            if lockedTarget and isValidTarget(lockedTarget) then
-                humanoid.AutoRotate = false
-            end
-        end
-    end
-    lastState = currentState
-    if stickyTarget then
-        if isValidTarget(stickyTarget) then
-            lockedTarget = stickyTarget
-            if not isActivelyHolding() and not (lockExpireTime > 0 and tick() < lockExpireTime) then
-                currentLockSource = "sticky"
-            end
-        else
-            clearSticky()
-            if not activeLockKey and not isHoldingMouse then
-                lockedTarget = nil
-                setRotateEnabled(false)
-                if humanoid then humanoid.AutoRotate = true end
-            end
-        end
-    end
-    if isHoldingQ then
-        if not qLocked and (tick() - qHoldStart) >= Config.BehindHoldDelay then
-            qLocked = true
-            tryActivateLock("q")
-            lockExpireTime = tick() + 1.5
-            activeLockKey = nil
-        end
-        if qLocked and lockedTarget then
-            trySmoothBehind()
-        end
-    end
-    local shouldHaveLock = activeLockKey ~= nil or isHoldingMouse or stickyTarget ~= nil or isActivelyHolding()
-    if not shouldHaveLock and lockExpireTime > 0 then
-        if tick() < lockExpireTime then
-            shouldHaveLock = true
-        else
-            if not stickyTarget then
-                lockedTarget, currentLockSource, lockExpireTime = nil, nil, 0
-                setRotateEnabled(false)
-                pcall(function() humanoid.AutoRotate = true end)
-            else
-                lockExpireTime = 0
-                currentLockSource = "sticky"
-            end
-        end
-    end
-    if not shouldHaveLock then
-        if lockedTarget and not (isHoldingQ and qLocked) and not stickyTarget then
-            lockedTarget, currentLockSource, activeLockKey, isHoldingMouse = nil, nil, nil, false
-            setRotateEnabled(false)
-            pcall(function() humanoid.AutoRotate = true end)
-        end
-        return
-    end
-    if shouldRetarget() and not aerial and not stickyTarget and tick() - lastRetarget >= Config.UltraScanInterval then
-        lastRetarget = tick()
-        local closest = getClosestTarget()
-        if closest and closest ~= lockedTarget then
-            lockedTarget = closest
-            smoothedAimPos, smoothedAimTarget = nil, nil
-            watchTargetForGrab(closest)
-        end
-    end
-    if stickyTarget and isValidTarget(stickyTarget) then
-        lockedTarget = stickyTarget
-    elseif priorityTarget and isValidTarget(priorityTarget) and not stickyTarget then
-        lockedTarget = priorityTarget
-    elseif priorityTarget and not isValidTarget(priorityTarget) then
-        clearPriority()
-    end
-    if lockedTarget and isValidTarget(lockedTarget) then
-        local hrpCheck = getRoot(lockedTarget)
-        if hrpCheck then
-            local d = (rootPart.Position - hrpCheck.Position).Magnitude
-            if not isWithinDistance(d) then
-                if stickyTarget ~= lockedTarget then lockedTarget = nil end
-            elseif Config.LockOnlyInFront and not isInFront(hrpCheck) and not isActivelyHolding() and not stickyTarget then
-                lockedTarget = nil
-            end
-        end
-    end
-    if not lockedTarget or not isValidTarget(lockedTarget) then
-        if stickyTarget then return end
-        if aerial then lockedTarget = nil return end
-        local newTarget = getClosestTarget()
-        if newTarget then
-            lockedTarget = newTarget
-            smoothedAimPos, smoothedAimTarget = nil, nil
-            watchTargetForGrab(newTarget)
-        else
-            return
-        end
-    end
-    if isTargetCountering(lockedTarget) and not aerial and not stickyTarget then
-        local other = getClosestTarget()
-        if other and other ~= lockedTarget then
-            lockedTarget = other
-            smoothedAimPos, smoothedAimTarget = nil, nil
-            watchTargetForGrab(other)
-        end
-    end
-    if not lockedTarget or not lockedTarget.Parent then return end
-    local okKids, kids = pcall(function() return lockedTarget:GetChildren() end)
-    if okKids and kids then
-        for _, child in ipairs(kids) do
-            if isGrabMarker(child.Name) then
-                if stickyTarget == lockedTarget then clearSticky() end
-                hardClearLock()
-                return
-            end
-        end
-    end
-    local tRoot = getRoot(lockedTarget)
-    if not tRoot then return end
-    local tHum = lockedTarget:FindFirstChildOfClass("Humanoid")
-    if not tHum or tHum.Health <= 0 then return end
-    local source = resolveAimSource()
-    local rawAim = applyVelocityPrediction(getAimWorldPosition(lockedTarget, tRoot, source), tRoot, lockedTarget, dt)
-    if rawAim ~= rawAim then return end
-    local aimPos = smoothAim(lockedTarget, rawAim)
-    local unsafe = false
-    if Config.StrongValidation then
-        if isActivelyHolding() or stickyTarget then
-            unsafe = rootPart.CFrame.UpVector.Y < 0.4
-        else
-            unsafe = isStunned() or rootPart.CFrame.UpVector.Y < 0.65
-        end
-    else
-        unsafe = isStunned()
-            or currentState == Enum.HumanoidStateType.Physics
-            or currentState == Enum.HumanoidStateType.Ragdoll
-            or currentState == Enum.HumanoidStateType.FallingDown
-            or velocity > Config.MaxVelocityToLock
-            or rootPart.CFrame.UpVector.Y < 0.65
-    end
-    if unsafe then
-        disableUntil = math.max(disableUntil, tick() + Config.GraceTimeAfterStun)
-    end
-    if tick() < disableUntil and not ((Config.StrongValidation and isActivelyHolding()) or stickyTarget) then
-        setRotateEnabled(false)
-        pcall(function() humanoid.AutoRotate = true end)
-        return
-    end
-    pcall(function() humanoid.AutoRotate = false end)
-    local myPos = rootPart.Position
-    local targetPos = Vector3.new(aimPos.X, myPos.Y, aimPos.Z)
-    local look = rootPart.CFrame.LookVector
-    local flatLook = Vector3.new(look.X, 0, look.Z)
-    if flatLook.Magnitude > 1e-3 then
-        flatLook = flatLook.Unit
-    else
-        return
-    end
-    local flatTo = Vector3.new(targetPos.X - myPos.X, 0, targetPos.Z - myPos.Z)
-    if flatTo.Magnitude < 1e-3 then return end
-    flatTo = flatTo.Unit
-    local angleDeg = math.deg(math.acos(math.clamp(flatLook:Dot(flatTo), -1, 1)))
-    if Config.InstantBehindSnap and angleDeg > 90 then
-        local goal = CFrame.lookAt(myPos, targetPos)
-        rootPart.CFrame = goal
-        return
-    end
-    local deadzone = Config.TurnDeadzoneDegrees or 0
-    if (Config.ZeroDeadzoneWhenHolding and isActivelyHolding()) or stickyTarget then
-        deadzone = 0
-    end
-    if angleDeg < deadzone then return end
-    local goal = CFrame.lookAt(myPos, targetPos)
-    applyRotation(goal, flatLook, flatTo, dt, angleDeg)
+	if turboPanicked then return end
+	if not lockEnabled or not rootPart or not humanoid or not humanoid.Parent then return end
+	if isSelfRagdolled() then
+		if lockedTarget and not stickyTarget then hardClearLock() end
+		setRotateEnabled(false)
+		return
+	end
+	local currentState = humanoid:GetState()
+	local velocity = rootPart.AssemblyLinearVelocity.Magnitude
+	local aerial = isAerialState(currentState)
+	if lastState then
+		local wasAerial = isAerialState(lastState)
+		local nowNormal = currentState == Enum.HumanoidStateType.Running
+			or currentState == Enum.HumanoidStateType.Landed
+			or currentState == Enum.HumanoidStateType.RunningNoPhysics
+			or currentState == Enum.HumanoidStateType.GettingUp
+		if wasAerial and nowNormal then
+			disableUntil = 0
+			if lockedTarget and isValidTarget(lockedTarget) then
+				humanoid.AutoRotate = false
+			end
+		end
+	end
+	lastState = currentState
+	if stickyTarget then
+		if isValidTarget(stickyTarget) then
+			lockedTarget = stickyTarget
+			if not isActivelyHolding() and not (lockExpireTime > 0 and tick() < lockExpireTime) then
+				currentLockSource = "sticky"
+			end
+		else
+			clearSticky()
+			if not activeLockKey and not isHoldingMouse then
+				lockedTarget = nil
+				setRotateEnabled(false)
+				if humanoid then humanoid.AutoRotate = true end
+			end
+		end
+	end
+	if isHoldingQ then
+		if not qLocked and (tick() - qHoldStart) >= Config.BehindHoldDelay then
+			qLocked = true
+			tryActivateLock("q")
+			lockExpireTime = tick() + 1.5
+			activeLockKey = nil
+		end
+		if qLocked and lockedTarget then
+			trySmoothBehind()
+		end
+	end
+	local shouldHaveLock = activeLockKey ~= nil or isHoldingMouse or stickyTarget ~= nil or isActivelyHolding()
+	if not shouldHaveLock and lockExpireTime > 0 then
+		if tick() < lockExpireTime then
+			shouldHaveLock = true
+		else
+			if not stickyTarget then
+				lockedTarget, currentLockSource, lockExpireTime = nil, nil, 0
+				setRotateEnabled(false)
+				pcall(function() humanoid.AutoRotate = true end)
+			else
+				lockExpireTime = 0
+				currentLockSource = "sticky"
+			end
+		end
+	end
+	if not shouldHaveLock then
+		if lockedTarget and not (isHoldingQ and qLocked) and not stickyTarget then
+			lockedTarget, currentLockSource, activeLockKey, isHoldingMouse = nil, nil, nil, false
+			setRotateEnabled(false)
+			pcall(function() humanoid.AutoRotate = true end)
+		end
+		return
+	end
+	if shouldRetarget() and not aerial and not stickyTarget and tick() - lastRetarget >= Config.UltraScanInterval then
+		lastRetarget = tick()
+		local closest = getClosestTarget()
+		if closest and closest ~= lockedTarget then
+			lockedTarget = closest
+			smoothedAimPos, smoothedAimTarget = nil, nil
+			watchTargetForGrab(closest)
+		end
+	end
+	if stickyTarget and isValidTarget(stickyTarget) then
+		lockedTarget = stickyTarget
+	elseif priorityTarget and isValidTarget(priorityTarget) and not stickyTarget then
+		lockedTarget = priorityTarget
+	elseif priorityTarget and not isValidTarget(priorityTarget) then
+		clearPriority()
+	end
+	if lockedTarget and isValidTarget(lockedTarget) then
+		local hrpCheck = getRoot(lockedTarget)
+		if hrpCheck then
+			local d = (rootPart.Position - hrpCheck.Position).Magnitude
+			if not isWithinDistance(d) then
+				if stickyTarget ~= lockedTarget then lockedTarget = nil end
+			elseif Config.LockOnlyInFront and not isInFront(hrpCheck) and not isActivelyHolding() and not stickyTarget then
+				lockedTarget = nil
+			end
+		end
+	end
+	if not lockedTarget or not isValidTarget(lockedTarget) then
+		if stickyTarget then return end
+		if aerial then lockedTarget = nil return end
+		local newTarget = getClosestTarget()
+		if newTarget then
+			lockedTarget = newTarget
+			smoothedAimPos, smoothedAimTarget = nil, nil
+			watchTargetForGrab(newTarget)
+		else
+			return
+		end
+	end
+	if isTargetCountering(lockedTarget) and not aerial and not stickyTarget then
+		local other = getClosestTarget()
+		if other and other ~= lockedTarget then
+			lockedTarget = other
+			smoothedAimPos, smoothedAimTarget = nil, nil
+			watchTargetForGrab(other)
+		end
+	end
+	if not lockedTarget or not lockedTarget.Parent then return end
+	local okKids, kids = pcall(function() return lockedTarget:GetChildren() end)
+	if okKids and kids then
+		for _, child in ipairs(kids) do
+			if isGrabMarker(child.Name) then
+				if stickyTarget == lockedTarget then clearSticky() end
+				hardClearLock()
+				return
+			end
+		end
+	end
+	local tRoot = getRoot(lockedTarget)
+	if not tRoot then return end
+	local tHum = lockedTarget:FindFirstChildOfClass("Humanoid")
+	if not tHum or tHum.Health <= 0 then return end
+	local source = resolveAimSource()
+	local rawAim = applyVelocityPrediction(getAimWorldPosition(lockedTarget, tRoot, source), tRoot, lockedTarget, dt)
+	if rawAim ~= rawAim then return end
+	local aimPos = smoothAim(lockedTarget, rawAim)
+	local unsafe = false
+	if Config.StrongValidation then
+		if isActivelyHolding() or stickyTarget then
+			unsafe = rootPart.CFrame.UpVector.Y < 0.4
+		else
+			unsafe = isStunned() or rootPart.CFrame.UpVector.Y < 0.65
+		end
+	else
+		unsafe = isStunned()
+			or currentState == Enum.HumanoidStateType.Physics
+			or currentState == Enum.HumanoidStateType.Ragdoll
+			or currentState == Enum.HumanoidStateType.FallingDown
+			or velocity > Config.MaxVelocityToLock
+			or rootPart.CFrame.UpVector.Y < 0.65
+	end
+	if unsafe then
+		disableUntil = math.max(disableUntil, tick() + Config.GraceTimeAfterStun)
+	end
+	if tick() < disableUntil and not ((Config.StrongValidation and isActivelyHolding()) or stickyTarget) then
+		setRotateEnabled(false)
+		pcall(function() humanoid.AutoRotate = true end)
+		return
+	end
+	pcall(function() humanoid.AutoRotate = false end)
+	local myPos = rootPart.Position
+	local targetPos = Vector3.new(aimPos.X, myPos.Y, aimPos.Z)
+	local look = rootPart.CFrame.LookVector
+	local flatLook = Vector3.new(look.X, 0, look.Z)
+	if flatLook.Magnitude > 1e-3 then
+		flatLook = flatLook.Unit
+	else
+		return
+	end
+	local flatTo = Vector3.new(targetPos.X - myPos.X, 0, targetPos.Z - myPos.Z)
+	if flatTo.Magnitude < 1e-3 then return end
+	flatTo = flatTo.Unit
+	local angleDeg = math.deg(math.acos(math.clamp(flatLook:Dot(flatTo), -1, 1)))
+	if Config.InstantBehindSnap and angleDeg > 90 then
+		local goal = CFrame.lookAt(myPos, targetPos)
+		rootPart.CFrame = goal
+		return
+	end
+	local deadzone = Config.TurnDeadzoneDegrees or 0
+	if (Config.ZeroDeadzoneWhenHolding and isActivelyHolding()) or stickyTarget then
+		deadzone = 0
+	end
+	if angleDeg < deadzone then return end
+	local goal = CFrame.lookAt(myPos, targetPos)
+	applyRotation(goal, flatLook, flatTo, dt, angleDeg)
 end
 
 pcall(function()
-    RunService:UnbindFromRenderStep("CharacterLock_Triple")
+	RunService:UnbindFromRenderStep("CharacterLock_Triple")
 end)
 RunService:BindToRenderStep("CharacterLock_Triple", Enum.RenderPriority.Camera.Value + 1, doLock)
 RunService.Heartbeat:Connect(doLock)
 if RunService.PostSimulation then
-    RunService.PostSimulation:Connect(doLock)
+	RunService.PostSimulation:Connect(doLock)
 else
-    RunService.Stepped:Connect(doLock)
+	RunService.Stepped:Connect(doLock)
 end
 if RunService.PreRender then
-    RunService.PreRender:Connect(doLock)
+	RunService.PreRender:Connect(doLock)
 end
 
 print("Character Lock TRIPLO INSTANTANEO | CFrame 3x | Root 360")
 
-
 -- ============================================================
--- TURBO GUI v5  |  Turbo style  |  Icons  |  Aim Parts  |  Accent  |  Panic
+-- TURBO GUI (otimizado para não estourar registradores)
 -- ============================================================
 
-local GuiService = game:GetService("GuiService")
-local HttpService = game:GetService("HttpService")
-local PlayerGui = player:WaitForChild("PlayerGui")
-
-local accentElements = {} -- {object, prop} recolored on accent change
 local Theme = {
-    Bg = Color3.fromRGB(18, 18, 22),
-    Panel = Color3.fromRGB(24, 24, 30),
-    Panel2 = Color3.fromRGB(30, 30, 38),
-    Element = Color3.fromRGB(36, 36, 46),
-    Stroke = Color3.fromRGB(50, 50, 62),
-    Text = Color3.fromRGB(235, 235, 245),
-    SubText = Color3.fromRGB(140, 140, 160),
-    Accent = Color3.fromRGB(220, 55, 70),
-    Green = Color3.fromRGB(70, 200, 120),
-    Red = Color3.fromRGB(220, 70, 85),
+	Bg = Color3.fromRGB(18, 18, 22),
+	Panel = Color3.fromRGB(24, 24, 30),
+	Panel2 = Color3.fromRGB(30, 30, 38),
+	Element = Color3.fromRGB(36, 36, 46),
+	Stroke = Color3.fromRGB(50, 50, 62),
+	Text = Color3.fromRGB(235, 235, 245),
+	SubText = Color3.fromRGB(140, 140, 160),
+	Accent = Color3.fromRGB(220, 55, 70),
+	Green = Color3.fromRGB(70, 200, 120),
+	Red = Color3.fromRGB(220, 70, 85),
 }
 
--- Icon pack (GitHub raw). Cached via writefile + getcustomasset when available.
+local accentElements = {}
+local toggleUpdaters = {}
+local knobStrokes = {}
+local lockKeyButtons = {}
+local AllLists = {}
+local AllBinds = {}
+local OpenList = nil
+local Binding = nil
+local MenuOpen = true
+local currentTab = nil
+local Pages, TabBtns = {}, {}
+local ScreenGui, Main, Top, TopLine, Title, StatusLbl
+
 local ICON_BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/Images/"
 local ICON_FILES = {
-    -- tabs
-    character = "character.png",
-    character_lock = "character_lock.png",
-    character_lock_active = "character_lock_active.png",
-    aim_parts = "aim_parts.png",
-    aimpart = "aimpart.png",
-    whitelist = "filter.png",
-    settings = "config.png",
-    config = "file_config.png",
-    -- methods / aim
-    methods = "methods.png",
-    method = "method.png",
-    rotate = "methods.png",
-    aim = "aim.png",
-    target = "target.png",
-    crosshair = "crosshair.png",
-    body_parts = "body_parts.png",
-    bodyparts = "bodyparts.png",
-    offset = "offset.png",
-    position = "position.png",
-    layers = "layers.png",
-    -- prediction / smooth / delay
-    prediction = "prediction.png",
-    smooth = "smooth.png",
-    delay = "delay.png",
-    deadzone = "deadzone.png",
-    clock = "clock.png",
-    time = "time.png",
-    hourglass = "hourglass.png",
-    speed = "speed.png",
-    boost = "boost.png",
-    -- distance / teleport
-    distance = "distance.png",
-    teleport = "teleport.png",
-    world = "world.png",
-    -- validation / shield
-    shield = "shield.png",
-    shield_block = "shield_block.png",
-    block = "block.png",
-    check = "check.png",
-    checkmark = "checkmark.png",
-    circle_check = "circle_check.png",
-    circle_cross = "circle_cross.png",
-    cross = "cross.png",
-    crossmark = "crossmark.png",
-    -- keys / input
-    keyboard = "keyboard.png",
-    mouse = "mouse.png",
-    bind = "bind.png",
-    unbound = "unbound.png",
-    always = "always.png",
-    -- priority / sticky / behind
-    priority = "priority.png",
-    behind = "behind.png",
-    -- status
-    active = "active.png",
-    enable = "enable.png",
-    disable = "disable.png",
-    play = "play.png",
-    pause = "pause.png",
-    stop = "stop.png",
-    danger = "danger.png",
-    warning = "warning.png",
-    panic = "panic.png",
-    -- config
-    save = "download.png",
-    load = "download.png",
-    download = "download.png",
-    file = "file.png",
-    file_config = "file_config.png",
-    reset = "reset.png",
-    info = "info.png",
-    eye = "eye.png",
-    hidden = "hidden.png",
-    filter = "filter.png",
-    contacts = "contacts.png",
-    dashboard = "dashboard.png",
-    chart = "chart.png",
-    console = "console.png",
-    code = "code.png",
-    circuit = "circuit_board.png",
-    close = "close.png",
-    firstperson = "firstperson.png",
+	character = "character.png", aim_parts = "body_parts.png", whitelist = "hidden.png",
+	settings = "config.png", config = "file_config.png", methods = "methods.png",
+	aim = "aim.png", target = "target.png", crosshair = "crosshair.png",
+	body_parts = "body_parts.png", prediction = "prediction.png", smooth = "smooth.png",
+	delay = "delay.png", deadzone = "deadzone.png", hourglass = "hourglass.png",
+	distance = "distance.png", shield = "shield.png", block = "block.png",
+	keyboard = "keyboard.png", mouse = "mouse.png", bind = "bind.png",
+	always = "always.png", priority = "priority.png", behind = "behind.png",
+	panic = "panic.png", file = "file.png", info = "info.png", eye = "eye.png",
+	contacts = "contacts.png", dashboard = "dashboard.png", console = "console.png",
 }
 
 local iconCache = {}
 local function getIcon(name)
-    if iconCache[name] ~= nil then return iconCache[name] end
-    local file = ICON_FILES[name]
-    if not file then iconCache[name] = false; return nil end
-    local url = ICON_BASE .. file
-    local ok, result = pcall(function()
-        local folder = "TurboIcons"
-        if type(isfolder) == "function" and type(makefolder) == "function" then
-            if not isfolder(folder) then pcall(makefolder, folder) end
-        end
-        local path = folder .. "/" .. file
-        local needDownload = true
-        if type(isfile) == "function" and isfile(path) then
-            needDownload = false
-        end
-        if needDownload then
-            local data
-            if type(request) == "function" then
-                local res = request({Url = url, Method = "GET"})
-                data = res and (res.Body or res.body)
-            elseif type(http_request) == "function" then
-                local res = http_request({Url = url, Method = "GET"})
-                data = res and (res.Body or res.body)
-            elseif type(syn) == "table" and type(syn.request) == "function" then
-                local res = syn.request({Url = url, Method = "GET"})
-                data = res and (res.Body or res.body)
-            else
-                data = game:HttpGet(url)
-            end
-            if not data or #data < 50 then return nil end
-            if type(writefile) == "function" then
-                writefile(path, data)
-            else
-                return nil
-            end
-        end
-        -- Potassium / most executors
-        if type(getcustomasset) == "function" then
-            return getcustomasset(path)
-        end
-        if type(getsynasset) == "function" then
-            return getsynasset(path)
-        end
-        if type(getcustomasset) == "nil" and type(Drawing) == "table" then
-            return nil
-        end
-        return nil
-    end)
-    if ok and result and type(result) == "string" and #result > 0 then
-        iconCache[name] = result
-        return result
-    end
-    iconCache[name] = false
-    return nil
+	if iconCache[name] ~= nil then return iconCache[name] end
+	local file = ICON_FILES[name]
+	if not file then iconCache[name] = false; return nil end
+	local url = ICON_BASE .. file
+	local ok, result = pcall(function()
+		local folder = "TurboIcons"
+		if type(isfolder) == "function" and type(makefolder) == "function" then
+			if not isfolder(folder) then pcall(makefolder, folder) end
+		end
+		local path = folder .. "/" .. file
+		local needDownload = true
+		if type(isfile) == "function" and isfile(path) then
+			needDownload = false
+		end
+		if needDownload then
+			local data
+			if type(request) == "function" then
+				local res = request({Url = url, Method = "GET"})
+				data = res and (res.Body or res.body)
+			elseif type(http_request) == "function" then
+				local res = http_request({Url = url, Method = "GET"})
+				data = res and (res.Body or res.body)
+			elseif type(syn) == "table" and type(syn.request) == "function" then
+				local res = syn.request({Url = url, Method = "GET"})
+				data = res and (res.Body or res.body)
+			else
+				data = game:HttpGet(url)
+			end
+			if not data or #data < 50 then return nil end
+			if type(writefile) == "function" then
+				writefile(path, data)
+			else
+				return nil
+			end
+		end
+		if type(getcustomasset) == "function" then
+			return getcustomasset(path)
+		end
+		if type(getsynasset) == "function" then
+			return getsynasset(path)
+		end
+		return nil
+	end)
+	if ok and result and type(result) == "string" and #result > 0 then
+		iconCache[name] = result
+		return result
+	end
+	iconCache[name] = false
+	return nil
 end
 
 local function New(c, p, parent)
-    local o = Instance.new(c)
-    for k, v in pairs(p or {}) do o[k] = v end
-    if parent then o.Parent = parent end
-    return o
+	local o = Instance.new(c)
+	for k, v in pairs(p or {}) do o[k] = v end
+	if parent then o.Parent = parent end
+	return o
 end
 local function Corner(p, r) return New("UICorner", {CornerRadius = UDim.new(0, r or 6)}, p) end
 local function Stroke(p, c, t) return New("UIStroke", {Color = c or Theme.Stroke, Thickness = t or 1}, p) end
 local function Tween(o, props, d)
-    TweenService:Create(o, TweenInfo.new(d or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+	TweenService:Create(o, TweenInfo.new(d or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
 end
 local function Label(parent, text, size, color, bold)
-    return New("TextLabel", {
-        BackgroundTransparency = 1, Text = text,
-        TextColor3 = color or Theme.Text, TextSize = size or 12,
-        Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham,
-        TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center,
-        BorderSizePixel = 0, TextTruncate = Enum.TextTruncate.AtEnd,
-    }, parent)
+	return New("TextLabel", {
+		BackgroundTransparency = 1, Text = text,
+		TextColor3 = color or Theme.Text, TextSize = size or 13,
+		Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham,
+		TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center,
+		BorderSizePixel = 0, TextTruncate = Enum.TextTruncate.AtEnd,
+	}, parent)
 end
 
-local old = PlayerGui:FindFirstChild("Turbo")
-if old then old:Destroy() end
-
-local ScreenGui = New("ScreenGui", {
-    Name = "Turbo", ResetOnSpawn = false, IgnoreGuiInset = true,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-}, PlayerGui)
-
-local Main = New("Frame", {
-    Size = UDim2.fromOffset(920, 560),
-    Position = UDim2.new(0.5, -460, 0.5, -280),
-    BackgroundColor3 = Theme.Bg, BorderSizePixel = 0,
-    Active = true, ClipsDescendants = true,
-}, ScreenGui)
-Corner(Main, 10)
-Stroke(Main)
-
--- Header
-local Top = New("Frame", {
-    Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = Theme.Panel, BorderSizePixel = 0, Active = true,
-}, Main)
-Corner(Top, 10)
-New("Frame", {Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14), BackgroundColor3 = Theme.Panel, BorderSizePixel = 0}, Top)
-local TopLine = New("Frame", {Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Accent, BorderSizePixel = 0}, Top)
-
-local Title = Label(Top, "Turbo", 18, Theme.Accent, true)
-Title.Position = UDim2.fromOffset(16, 0)
-Title.Size = UDim2.fromOffset(80, 46)
-local Sub = Label(Top, "v5  ·  Character", 11, Theme.SubText)
-Sub.Position = UDim2.fromOffset(95, 0)
-Sub.Size = UDim2.fromOffset(240, 46)
-local StatusLbl = Label(Top, "● ACTIVE", 11, Theme.Green, true)
-StatusLbl.Position = UDim2.new(1, -115, 0, 0)
-StatusLbl.Size = UDim2.fromOffset(100, 46)
-StatusLbl.TextXAlignment = Enum.TextXAlignment.Right
-
--- Sidebar
-local Side = New("Frame", {
-    Size = UDim2.fromOffset(178, 514), Position = UDim2.fromOffset(0, 46),
-    BackgroundColor3 = Theme.Panel, BorderSizePixel = 0,
-}, Main)
-New("Frame", {Size = UDim2.fromOffset(1, 514), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = Theme.Stroke, BorderSizePixel = 0}, Side)
-local TabBox = New("Frame", {
-    Size = UDim2.new(1, -12, 1, -16), Position = UDim2.fromOffset(6, 10), BackgroundTransparency = 1,
-}, Side)
-New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder}, TabBox)
-
-local Content = New("Frame", {
-    Size = UDim2.new(1, -178, 1, -46), Position = UDim2.fromOffset(178, 46),
-    BackgroundTransparency = 1, ClipsDescendants = true,
-}, Main)
-
-local Pages, TabBtns = {}, {}
-local currentTab = nil
-
-local function makePage(name)
-    local sc = New("ScrollingFrame", {
-        Name = name, Size = UDim2.new(1, -16, 1, -16), Position = UDim2.fromOffset(8, 8),
-        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4,
-        ScrollBarImageColor3 = Theme.Accent, CanvasSize = UDim2.new(0, 0, 0, 0),
-        AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false, ClipsDescendants = true,
-        ScrollingDirection = Enum.ScrollingDirection.Y,
-        ElasticBehavior = Enum.ElasticBehavior.Never,
-    }, Content)
-    New("UIPadding", {
-        PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 6),
-        PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 12),
-    }, sc)
-    local row = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1, ClipsDescendants = false,
-    }, sc)
-    local L = New("Frame", {
-        Name = "L", Size = UDim2.new(0.5, -6, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1, ClipsDescendants = false,
-    }, row)
-    New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, L)
-    local R = New("Frame", {
-        Name = "R", Size = UDim2.new(0.5, -6, 0, 0), Position = UDim2.new(0.5, 6, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ClipsDescendants = false,
-    }, row)
-    New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, R)
-    Pages[name] = {sc = sc, L = L, R = R}
-    return Pages[name]
-end
-
-local function selectTab(name)
-    currentTab = name
-    for n, p in pairs(Pages) do p.sc.Visible = (n == name) end
-    for n, b in pairs(TabBtns) do
-        local on = n == name
-        b.BackgroundTransparency = on and 0 or 1
-        b.BackgroundColor3 = Theme.Element
-        local ind = b:FindFirstChild("Ind")
-        if ind then ind.Visible = on end
-        local ic = b:FindFirstChild("IconImg")
-        if ic and ic:IsA("ImageLabel") then
-            ic.ImageColor3 = on and Theme.Accent or Theme.SubText
-        end
-        local tx = b:FindFirstChild("TabText")
-        if tx then tx.TextColor3 = on and Theme.Text or Theme.SubText end
-    end
-end
-
-local function makeTab(name, iconName, order)
-    local b = New("TextButton", {
-        Size = UDim2.new(1, 0, 0, 54), BackgroundColor3 = Theme.Element,
-        BackgroundTransparency = 1, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
-        LayoutOrder = order, Active = true,
-    }, TabBox)
-    Corner(b, 7)
-    local ind = New("Frame", {
-        Name = "Ind", Size = UDim2.fromOffset(3, 32), Position = UDim2.new(0, 0, 0.5, -16),
-        BackgroundColor3 = Theme.Accent, BorderSizePixel = 0, Visible = false,
-    }, b)
-    Corner(ind, 2)
-    table.insert(accentElements, ind)
-    local asset = getIcon(iconName)
-    if asset then
-        -- Larger display size + Fit reduces visible pixelation from 256px sources
-        local img = New("ImageLabel", {
-            Name = "IconImg", Size = UDim2.fromOffset(44, 44), Position = UDim2.fromOffset(8, 5),
-            BackgroundTransparency = 1, Image = asset, ImageColor3 = Theme.SubText,
-            ScaleType = Enum.ScaleType.Fit,
-        }, b)
-    else
-        local fallback = Label(b, "●", 20, Theme.SubText, true)
-        fallback.Name = "IconImg"
-        fallback.Size = UDim2.fromOffset(44, 54)
-        fallback.Position = UDim2.fromOffset(8, 0)
-        fallback.TextXAlignment = Enum.TextXAlignment.Center
-    end
-    local tx = Label(b, name, 13, Theme.SubText, true)
-    tx.Name = "TabText"
-    tx.Position = UDim2.fromOffset(58, 0)
-    tx.Size = UDim2.new(1, -64, 1, 0)
-    b.Activated:Connect(function() selectTab(name) end)
-    TabBtns[name] = b
-end
-
-makeTab("Character", "character", 1)
-makeTab("AimParts", "aim_parts", 2)
-makeTab("Whitelist", "filter", 3)
-makeTab("Settings", "console", 4)
-makeTab("Config", "file_config", 5)
-
-local pCL = makePage("Character")
-local pAP = makePage("AimParts")
-local pWL = makePage("Whitelist")
-local pST = makePage("Settings")
-local pCF = makePage("Config")
-
-local function Card(parent, title, iconName)
-    local f = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundColor3 = Theme.Panel, BorderSizePixel = 0, ClipsDescendants = false,
-    }, parent)
-    Corner(f, 8)
-    Stroke(f)
-    local hdr = New("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 1}, f)
-    local asset = iconName and getIcon(iconName)
-    local titleX = 12
-    if asset then
-        -- Slightly larger icons reduce pixelation when scaling 256px assets down
-        local ic = New("ImageLabel", {
-            Size = UDim2.fromOffset(32, 32), Position = UDim2.fromOffset(10, 4),
-            BackgroundTransparency = 1, Image = asset, ImageColor3 = Theme.Accent,
-            ScaleType = Enum.ScaleType.Fit,
-        }, hdr)
-        table.insert(accentElements, ic)
-        titleX = 48
-    end
-    local t = Label(hdr, title, 13, Theme.Text, true)
-    t.Position = UDim2.fromOffset(titleX, 0)
-    t.Size = UDim2.new(1, -titleX - 8, 1, 0)
-    local accentLine = New("Frame", {
-        Size = UDim2.new(1, -24, 0, 1), Position = UDim2.fromOffset(12, 39),
-        BackgroundColor3 = Theme.Accent, BorderSizePixel = 0,
-    }, hdr)
-    table.insert(accentElements, accentLine)
-    local body = New("Frame", {
-        Size = UDim2.new(1, -16, 0, 0), Position = UDim2.fromOffset(8, 44),
-        AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ClipsDescendants = false,
-    }, f)
-    New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, body)
-    New("UIPadding", {PaddingBottom = UDim.new(0, 8)}, body)
-    return body
-end
-
-local function Toggle(parent, text, getter, setter)
-    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1}, parent)
-    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -48, 1, 0)
-    local btn = New("TextButton", {
-        Size = UDim2.fromOffset(36, 18), Position = UDim2.new(1, -36, 0.5, -9),
-        BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
-    }, row)
-    Corner(btn, 9)
-    local cir = New("Frame", {
-        Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(3, 3),
-        BackgroundColor3 = Theme.SubText, BorderSizePixel = 0,
-    }, btn)
-    Corner(cir, 6)
-    local function upd()
-        local on = getter()
-        if on then
-            Tween(btn, {BackgroundColor3 = Theme.Accent})
-            Tween(cir, {Position = UDim2.new(1, -15, 0, 3), BackgroundColor3 = Color3.new(1,1,1)})
-        else
-            Tween(btn, {BackgroundColor3 = Theme.Element})
-            Tween(cir, {Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.SubText})
-        end
-    end
-    upd()
-    btn.Activated:Connect(function() setter(not getter()); upd() end)
-end
-
-local function Slider(parent, text, min, max, dec, getter, setter)
-    dec = dec or 1
-    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1}, parent)
-    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -58, 0, 16)
-    local box = New("TextBox", {
-        Size = UDim2.fromOffset(52, 16), Position = UDim2.new(1, -52, 0, 0),
-        BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text, Text = "",
-        TextSize = 11, Font = Enum.Font.GothamMedium, ClearTextOnFocus = false, BorderSizePixel = 0,
-    }, row)
-    Corner(box, 4)
-    local bar = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 5), Position = UDim2.fromOffset(0, 26),
-        BackgroundColor3 = Theme.Element, BorderSizePixel = 0,
-    }, row)
-    Corner(bar, 3)
-    local fill = New("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Accent, BorderSizePixel = 0}, bar)
-    Corner(fill, 3)
-    table.insert(accentElements, fill)
-    local knob = New("Frame", {
-        Size = UDim2.fromOffset(10, 10), AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.new(0, 0, 0.5, 0), BackgroundColor3 = Theme.Text, BorderSizePixel = 0, ZIndex = 2,
-    }, bar)
-    Corner(knob, 5)
-    local function fmt(v)
-        if dec == 0 then return tostring(math.floor(v + 0.5)) end
-        return string.format("%." .. dec .. "f", v)
-    end
-    local function setV(v, fire)
-        v = math.clamp(v, min, max)
-        if dec == 0 then v = math.floor(v + 0.5)
-        else local m = 10 ^ dec; v = math.floor(v * m + 0.5) / m end
-        local a = (max == min) and 0 or (v - min) / (max - min)
-        fill.Size = UDim2.new(a, 0, 1, 0)
-        knob.Position = UDim2.new(a, 0, 0.5, 0)
-        box.Text = fmt(v)
-        if fire then setter(v) end
-    end
-    setV(getter(), false)
-    local drag = false
-    local function fromMouse()
-        local mx = UserInputService:GetMouseLocation().X
-        local left = bar.AbsolutePosition.X
-        local w = math.max(bar.AbsoluteSize.X, 1)
-        setV(min + (max - min) * math.clamp((mx - left) / w, 0, 1), true)
-    end
-    bar.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = true; fromMouse() end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if drag and i.UserInputType == Enum.UserInputType.MouseMovement then fromMouse() end
-    end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
-    end)
-    box.FocusLost:Connect(function()
-        local n = tonumber(box.Text)
-        if n then setV(n, true) else setV(getter(), false) end
-    end)
-end
-
-local OpenList = nil
-local AllLists = {}
 local function closeLists()
-    for _, l in ipairs(AllLists) do l.Visible = false end
-    OpenList = nil
+	for _, l in ipairs(AllLists) do l.Visible = false end
+	OpenList = nil
 end
-
-local function Dropdown(parent, text, options, getter, setter)
-    local row = New("Frame", {
-        Size = UDim2.new(1, 0, 0, 46), BackgroundTransparency = 1, ZIndex = 20, ClipsDescendants = false,
-    }, parent)
-    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, 0, 0, 16)
-    local btn = New("TextButton", {
-        Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 18),
-        BackgroundColor3 = Theme.Element, Text = "  " .. tostring(getter()),
-        TextColor3 = Theme.Text, TextSize = 11, Font = Enum.Font.GothamMedium,
-        TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 21,
-    }, row)
-    Corner(btn, 5)
-    local listH = math.min(#options * 24, 144)
-    local list = New("Frame", {
-        Size = UDim2.fromOffset(200, listH), BackgroundColor3 = Theme.Panel2,
-        BorderSizePixel = 0, Visible = false, ZIndex = 300, ClipsDescendants = true,
-    }, ScreenGui)
-    Corner(list, 5)
-    Stroke(list)
-    New("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, list)
-    table.insert(AllLists, list)
-    local function place()
-        local ap, as = btn.AbsolutePosition, btn.AbsoluteSize
-        list.Size = UDim2.fromOffset(math.max(as.X, 160), listH)
-        local vy = camera.ViewportSize.Y
-        local y = ap.Y + as.Y + 4
-        if y + listH > vy then y = ap.Y - listH - 4 end
-        list.Position = UDim2.fromOffset(ap.X, math.clamp(y, 0, math.max(0, vy - listH)))
-    end
-    for i, opt in ipairs(options) do
-        local o = New("TextButton", {
-            Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1,
-            Text = "  " .. tostring(opt), TextColor3 = Theme.Text, TextSize = 11,
-            Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
-            AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i, ZIndex = 301,
-        }, list)
-        o.Activated:Connect(function()
-            setter(opt)
-            btn.Text = "  " .. tostring(getter())
-            closeLists()
-        end)
-        o.MouseEnter:Connect(function() o.BackgroundTransparency = 0; o.BackgroundColor3 = Theme.Element end)
-        o.MouseLeave:Connect(function() o.BackgroundTransparency = 1 end)
-    end
-    btn.Activated:Connect(function()
-        if list.Visible then closeLists()
-        else closeLists(); place(); list.Visible = true; OpenList = list end
-    end)
-end
-
-local Binding = nil
-local AllBinds = {}
-local function Bind(parent, text, getter, setter)
-    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, ZIndex = 30}, parent)
-    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -100, 1, 0)
-    local btn = New("TextButton", {
-        Size = UDim2.fromOffset(92, 24), Position = UDim2.new(1, -92, 0.5, -12),
-        BackgroundColor3 = Theme.Element, Text = getter().Name, TextColor3 = Theme.Text,
-        TextSize = 11, Font = Enum.Font.GothamMedium, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 31,
-    }, row)
-    Corner(btn, 5)
-    btn.Activated:Connect(function()
-        if Binding == btn then Binding = nil; btn.Text = getter().Name; btn.TextColor3 = Theme.Text
-        else Binding = btn; btn.Text = "..."; btn.TextColor3 = Theme.Accent end
-    end)
-    table.insert(AllBinds, {btn = btn, getter = getter, setter = setter})
-end
-
-local AIM_OPTS = {"Root", "Head", "AboveHead", "Torso", "Chest", "Body", "Front", "Back", "Left", "Right", "LeftArm", "RightArm"}
-
--- ===== CharacterLock =====
-local cM = Card(pCL.L, "Methods", "methods")
-Dropdown(cM, "Rotate Method",
-    {"CFrame", "Align", "Align2", "BodyGyro", "AngularVel", "Torque", "Motor6D", "Assembly"},
-    function() return Config.RotateMode end, function(v) Config.RotateMode = v end)
-
-local cD = Card(pCL.L, "Deadzone", "deadzone")
-Slider(cD, "Deadzone (deg)", 0, 180, 0, function() return Config.TurnDeadzoneDegrees end, function(v) Config.TurnDeadzoneDegrees = v end)
-Toggle(cD, "Zero While Holding", function() return Config.ZeroDeadzoneWhenHolding end, function(v) Config.ZeroDeadzoneWhenHolding = v end)
-
-local cP = Card(pCL.L, "Prediction", "prediction")
-Toggle(cP, "Enabled", function() return Config.UsePrediction end, function(v) Config.UsePrediction = v end)
-Slider(cP, "Strength", 0, 1, 3, function() return Config.PredictionStrength end, function(v) Config.PredictionStrength = v end)
-Slider(cP, "Max Speed", 1, 300, 0, function() return Config.PredictionMaxSpeed end, function(v) Config.PredictionMaxSpeed = v end)
-Slider(cP, "History Smooth", 1, 60, 0, function() return Config.PredictionHistorySmoothing end, function(v) Config.PredictionHistorySmoothing = v end)
-
-local cS = Card(pCL.R, "Smooth", "smooth")
-Slider(cS, "Aim Smooth", 0, 0.99, 2, function() return Config.AimSmooth end, function(v) Config.AimSmooth = v end)
-Toggle(cS, "Smooth Turn", function() return Config.UseSmoothTurn end, function(v) Config.UseSmoothTurn = v end)
-Slider(cS, "Turn Time", 0.01, 1, 3, function() return Config.Smoothness end, function(v) Config.Smoothness = v end)
-
-local cDe = Card(pCL.R, "Delay / Behind", "delay")
-Slider(cDe, "Behind Hold Delay", 0, 2, 2, function() return Config.BehindHoldDelay end, function(v) Config.BehindHoldDelay = v end)
-Slider(cDe, "Behind Distance", 0, 20, 1, function() return Config.BehindDistance end, function(v) Config.BehindDistance = v end)
-Slider(cDe, "Behind Smooth", 0, 0.5, 3, function() return Config.BehindSmoothTime end, function(v) Config.BehindSmoothTime = v end)
-Toggle(cDe, "Enable Teleport", function() return Config.EnableTeleport end, function(v) Config.EnableTeleport = v end)
-
-local cR = Card(pCL.R, "Retargets", "crosshair")
-Toggle(cR, "Block Retarget", function() return Config.BlockRetargetClosest end, function(v) Config.BlockRetargetClosest = v end)
-Toggle(cR, "Skill Retarget", function() return Config.SkillRetargetClosest end, function(v) Config.SkillRetargetClosest = v end)
-Toggle(cR, "Mouse Retarget", function() return Config.MouseRetargetClosest end, function(v) Config.MouseRetargetClosest = v end)
-Slider(cR, "Scan Interval", 0, 1, 3, function() return Config.UltraScanInterval end, function(v) Config.UltraScanInterval = v end)
-
-local cDi = Card(pCL.R, "Distance", "distance")
-Slider(cDi, "Min Lock Distance", 0, 100, 0, function() return Config.MinLockDistance end, function(v) Config.MinLockDistance = v end)
-Slider(cDi, "Max Lock Distance", 10, 1000, 0, function() return Config.MaxLockDistance end, function(v) Config.MaxLockDistance = v end)
-
-local cV = Card(pCL.L, "Validation", "shield")
-Toggle(cV, "Strong Validation", function() return Config.StrongValidation end, function(v) Config.StrongValidation = v end)
-Toggle(cV, "Instant Behind Snap", function() return Config.InstantBehindSnap end, function(v) Config.InstantBehindSnap = v end)
-Toggle(cV, "Ignore Active Counter", function() return Config.IgnoreActiveCounter end, function(v) Config.IgnoreActiveCounter = v end)
-
--- ===== Aim Parts =====
-local function aimCard(col, source, title, icon, keyGet, keySet)
-    local c = Card(col, title, icon)
-    if keyGet and keySet then
-        Bind(c, "Key", keyGet, keySet)
-    end
-    Dropdown(c, "Aim Part", AIM_OPTS,
-        function() return Config.AimPointBySource[source] or "Root" end,
-        function(v) Config.AimPointBySource[source] = v end)
-    Slider(c, "Offset", -10, 10, 2,
-        function() return Config.AimOffsetBySource[source] or 0 end,
-        function(v) Config.AimOffsetBySource[source] = v end)
-end
-
-aimCard(pAP.L, "block", "Block", "block",
-    function() return Config.BlockKey or Enum.KeyCode.F end,
-    function(v) Config.BlockKey = v end)
-aimCard(pAP.L, "skill", "Skill", "aimpart", nil, nil)
-aimCard(pAP.L, "mouse", "M1 (Mouse)", "mouse", nil, nil)
-aimCard(pAP.R, "q", "Behind", "behind",
-    function() return Config.BehindKey end,
-    function(v) Config.BehindKey = v end)
-aimCard(pAP.R, "priority", "Priority", "priority",
-    function() return Config.PriorityKey end,
-    function(v) Config.PriorityKey = v end)
-aimCard(pAP.R, "sticky", "Sticky", "always",
-    function() return Config.StickyLockKey end,
-    function(v) Config.StickyLockKey = v end)
-
-local cDef = Card(pAP.R, "Default / Above Head", "body_parts")
-Dropdown(cDef, "Default Aim Part", AIM_OPTS,
-    function() return Config.AimPointBySource.default end,
-    function(v) Config.AimPointBySource.default = v end)
-Slider(cDef, "Default Offset", -10, 10, 2,
-    function() return Config.AimOffsetBySource.default end,
-    function(v) Config.AimOffsetBySource.default = v end)
-Slider(cDef, "Above Head Height", 0, 5, 2,
-    function() return Config.AboveHeadHeight end,
-    function(v) Config.AboveHeadHeight = v end)
-
--- ===== Whitelist =====
-local cAlly = Card(pWL.L, "Ally Filter", "eye")
-Toggle(cAlly, "Whitelist Allies", function() return Config.IgnoreAllies.Enabled end, function(v) Config.IgnoreAllies.Enabled = v; rebuildAllyCache() end)
-Dropdown(cAlly, "Mode", {"UserId", "Name"},
-    function() return Config.IgnoreAllies.UseUserId and "UserId" or "Name" end,
-    function(v) Config.IgnoreAllies.UseUserId = (v == "UserId"); rebuildAllyCache() end)
-
-local cPl = Card(pWL.R, "Players in Server", "contacts")
-local plScroll = New("ScrollingFrame", {
-    Size = UDim2.new(1, 0, 0, 280), BackgroundTransparency = 1, BorderSizePixel = 0,
-    ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.Accent,
-    CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
-}, cPl)
-New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.Name}, plScroll)
-
-local function isWL(plr)
-    if Config.IgnoreAllies.UseUserId then
-        for _, id in ipairs(Config.IgnoreAllies.UserIds) do if tonumber(id) == plr.UserId then return true end end
-    else
-        local w = string.lower(plr.Name)
-        for _, n in ipairs(Config.IgnoreAllies.Names) do if string.lower(tostring(n)) == w then return true end end
-    end
-    return false
-end
-local function setWL(plr, val)
-    if Config.IgnoreAllies.UseUserId then
-        local ids = Config.IgnoreAllies.UserIds
-        for i = #ids, 1, -1 do if tonumber(ids[i]) == plr.UserId then table.remove(ids, i) end end
-        if val then table.insert(ids, plr.UserId) end
-    else
-        local names = Config.IgnoreAllies.Names
-        for i = #names, 1, -1 do if string.lower(tostring(names[i])) == string.lower(plr.Name) then table.remove(names, i) end end
-        if val then table.insert(names, plr.Name) end
-    end
-    rebuildAllyCache()
-end
-local function rebuildPL()
-    for _, c in ipairs(plScroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player then
-            local on = isWL(plr)
-            local b = New("TextButton", {
-                Size = UDim2.new(1, -4, 0, 26), BackgroundColor3 = on and Color3.fromRGB(40, 70, 50) or Theme.Element,
-                BorderSizePixel = 0, Text = "  " .. plr.Name .. (on and "  ✓" or ""),
-                TextColor3 = Theme.Text, TextSize = 11, Font = Enum.Font.GothamMedium,
-                TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false,
-            }, plScroll)
-            Corner(b, 5)
-            b.Activated:Connect(function()
-                setWL(plr, not isWL(plr))
-                local now = isWL(plr)
-                b.BackgroundColor3 = now and Color3.fromRGB(40, 70, 50) or Theme.Element
-                b.Text = "  " .. plr.Name .. (now and "  ✓" or "")
-            end)
-        end
-    end
-end
-rebuildPL()
-Players.PlayerAdded:Connect(rebuildPL)
-Players.PlayerRemoving:Connect(rebuildPL)
-
--- ===== Settings =====
-local cPrio = Card(pST.L, "Target Priority", "target")
-Dropdown(cPrio, "Priority", {"Players", "NPC", "Closest"},
-    function() return Config.TargetPriority end, function(v) Config.TargetPriority = v end)
-
-local cKeys = Card(pST.L, "Hotkeys", "keyboard")
-Bind(cKeys, "Menu Key", function() return Config.ToggleKey end, function(v) Config.ToggleKey = v end)
-Bind(cKeys, "Enable Lock Key", function() return Config.EnableLockKey end, function(v) Config.EnableLockKey = v end)
-Bind(cKeys, "Panic Key", function() return Config.PanicKey end, function(v) Config.PanicKey = v end)
-Bind(cKeys, "Sticky Key", function() return Config.StickyLockKey end, function(v) Config.StickyLockKey = v end)
-Bind(cKeys, "Behind Key", function() return Config.BehindKey end, function(v) Config.BehindKey = v end)
-Bind(cKeys, "Priority Key", function() return Config.PriorityKey end, function(v) Config.PriorityKey = v end)
-
-local cTime = Card(pST.R, "Lock Timing", "hourglass")
-Slider(cTime, "Hold Threshold (skill key)", 0, 4, 2, function() return Config.HoldThreshold end, function(v) Config.HoldThreshold = v end)
-Slider(cTime, "Click Duration (skill)", 0, 4, 2, function() return Config.ClickLockDuration end, function(v) Config.ClickLockDuration = v end)
-Slider(cTime, "Hold Threshold (mouse)", 0, 4, 2, function() return Config.MouseHoldThreshold end, function(v) Config.MouseHoldThreshold = v end)
-Slider(cTime, "Click Duration (mouse)", 0, 4, 2, function() return Config.MouseClickLockDuration end, function(v) Config.MouseClickLockDuration = v end)
-Toggle(cTime, "Use Mouse Button 1", function() return Config.UseMouseButton1 end, function(v) Config.UseMouseButton1 = v end)
-
-local cLK = Card(pST.R, "Lock Keys", "bind")
-local keyRow = New("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1}, cLK)
-New("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder}, keyRow)
-local commons = {{Enum.KeyCode.One,"1"},{Enum.KeyCode.Two,"2"},{Enum.KeyCode.Three,"3"},{Enum.KeyCode.Four,"4"},{Enum.KeyCode.F,"F"},{Enum.KeyCode.E,"E"},{Enum.KeyCode.R,"R"},{Enum.KeyCode.G,"G"}}
-local function inLK(k) for _, x in ipairs(Config.LockKeys) do if x == k then return true end end return false end
-local function togLK(k)
-    for i, x in ipairs(Config.LockKeys) do if x == k then table.remove(Config.LockKeys, i) return end end
-    table.insert(Config.LockKeys, k)
-end
-for i, e in ipairs(commons) do
-    local k, n = e[1], e[2]
-    local b = New("TextButton", {
-        Size = UDim2.fromOffset(32, 24), BackgroundColor3 = inLK(k) and Theme.Accent or Theme.Element,
-        BorderSizePixel = 0, Text = n, TextColor3 = Theme.Text, TextSize = 11,
-        Font = Enum.Font.GothamBold, AutoButtonColor = false, LayoutOrder = i,
-    }, keyRow)
-    Corner(b, 5)
-    b.Activated:Connect(function() togLK(k); b.BackgroundColor3 = inLK(k) and Theme.Accent or Theme.Element end)
-end
-
-local cPanic = Card(pST.L, "Panic", "panic")
-local panicInfo = Label(cPanic, "Panic Key destroys the GUI and fully disables the lock until you re-execute the script.", 11, Theme.SubText)
-panicInfo.Size = UDim2.new(1, 0, 0, 40)
-panicInfo.TextWrapped = true
-panicInfo.TextYAlignment = Enum.TextYAlignment.Top
-
-
--- ===== Accent Color =====
-local accentWatchers = {} -- functions to recolor UI when accent changes
-local function registerAccent(fn) table.insert(accentWatchers, fn) end
 
 local function applyAccent(c)
-    if typeof(c) ~= "Color3" then return end
-    Theme.Accent = c
-    -- header line
-    if TopLine then TopLine.BackgroundColor3 = c end
-    if Title then Title.TextColor3 = c end
-    -- status uses green/red separately
-    -- tabs indicator + active icons refreshed via selectTab
-    if currentTab then selectTab(currentTab) end
-    -- scrollbars
-    for _, p in pairs(Pages) do
-        if p.sc then p.sc.ScrollBarImageColor3 = c end
-    end
-    for _, el in ipairs(accentElements) do
-        if el and el.Parent then
-            pcall(function()
-                if el:IsA("ImageLabel") then
-                    el.ImageColor3 = c
-                else
-                    el.BackgroundColor3 = c
-                end
-            end)
-        end
-    end
-    for _, fn in ipairs(accentWatchers) do
-        pcall(fn, c)
-    end
+	if typeof(c) ~= "Color3" then return end
+	Theme.Accent = c
+	if TopLine then TopLine.BackgroundColor3 = c end
+	if Title then Title.TextColor3 = c end
+	if currentTab and TabBtns[currentTab] then
+		-- force refresh tab colors
+		for n, b in pairs(TabBtns) do
+			local on = n == currentTab
+			local ic = b:FindFirstChild("IconImg")
+			if ic and ic:IsA("ImageLabel") then
+				ic.ImageColor3 = on and Theme.Accent or Theme.SubText
+			end
+		end
+	end
+	for _, p in pairs(Pages) do
+		if p.sc then p.sc.ScrollBarImageColor3 = c end
+	end
+	for _, el in ipairs(accentElements) do
+		if el and el.Parent then
+			pcall(function()
+				if el:IsA("ImageLabel") then
+					el.ImageColor3 = c
+				else
+					el.BackgroundColor3 = c
+				end
+			end)
+		end
+	end
+	for _, upd in ipairs(toggleUpdaters) do
+		pcall(upd)
+	end
+	for _, stroke in ipairs(knobStrokes) do
+		if stroke and stroke.Parent then
+			pcall(function() stroke.Color = c end)
+		end
+	end
+	for _, entry in ipairs(lockKeyButtons) do
+		if entry.btn and entry.btn.Parent then
+			local active = false
+			for _, k in ipairs(Config.LockKeys) do
+				if k == entry.key then active = true break end
+			end
+			pcall(function()
+				entry.btn.BackgroundColor3 = active and Theme.Accent or Theme.Element
+			end)
+		end
+	end
 end
 
-local function ColorPicker(parent, text, getter, setter)
-    local row = New("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1}, parent)
-    Label(row, text, 12, Theme.Text).Size = UDim2.new(1, -120, 1, 0)
-    local swatch = New("TextButton", {
-        Size = UDim2.fromOffset(28, 20), Position = UDim2.new(1, -112, 0.5, -10),
-        BackgroundColor3 = getter(), BorderSizePixel = 0, Text = "", AutoButtonColor = false,
-    }, row)
-    Corner(swatch, 4)
-    Stroke(swatch, Theme.Stroke, 1)
-    local hex = New("TextBox", {
-        Size = UDim2.fromOffset(78, 20), Position = UDim2.new(1, -78, 0.5, -10),
-        BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text, TextSize = 10,
-        Font = Enum.Font.GothamMedium, ClearTextOnFocus = false, BorderSizePixel = 0,
-        Text = string.format("%02X%02X%02X",
-            math.floor(getter().R*255+0.5), math.floor(getter().G*255+0.5), math.floor(getter().B*255+0.5)),
-    }, row)
-    Corner(hex, 4)
-    local presets = {
-        Color3.fromRGB(220, 55, 70),   -- red
-        Color3.fromRGB(90, 120, 255),  -- blue
-        Color3.fromRGB(160, 80, 255),  -- purple
-        Color3.fromRGB(70, 200, 120),  -- green
-        Color3.fromRGB(255, 160, 40),  -- orange
-        Color3.fromRGB(0, 200, 220),   -- cyan
-        Color3.fromRGB(255, 80, 160),  -- pink
-        Color3.fromRGB(240, 240, 245), -- white
-    }
-    local pop = New("Frame", {
-        Size = UDim2.fromOffset(168, 70), BackgroundColor3 = Theme.Panel2,
-        BorderSizePixel = 0, Visible = false, ZIndex = 320,
-    }, ScreenGui)
-    Corner(pop, 6)
-    Stroke(pop)
-    New("UIListLayout", {
-        FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Left,
-        VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4),
-        SortOrder = Enum.SortOrder.LayoutOrder, Wraps = true,
-    }, pop)
-    New("UIPadding", {PaddingLeft = UDim.new(0, 6), PaddingTop = UDim.new(0, 6), PaddingRight = UDim.new(0, 6)}, pop)
-    table.insert(AllLists, pop)
-    local function setColor(c)
-        setter(c)
-        swatch.BackgroundColor3 = c
-        hex.Text = string.format("%02X%02X%02X",
-            math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), math.floor(c.B*255+0.5))
-        applyAccent(c)
-        pop.Visible = false
-    end
-    for i, pc in ipairs(presets) do
-        local b = New("TextButton", {
-            Size = UDim2.fromOffset(18, 18), BackgroundColor3 = pc, BorderSizePixel = 0,
-            Text = "", AutoButtonColor = false, LayoutOrder = i, ZIndex = 321,
-        }, pop)
-        Corner(b, 4)
-        b.Activated:Connect(function() setColor(pc) end)
-    end
-    swatch.Activated:Connect(function()
-        if pop.Visible then pop.Visible = false; return end
-        closeLists()
-        local ap = swatch.AbsolutePosition
-        pop.Position = UDim2.fromOffset(ap.X - 40, ap.Y + 24)
-        pop.Visible = true
-        OpenList = pop
-    end)
-    hex.FocusLost:Connect(function()
-        local t = hex.Text:gsub("#", "")
-        if #t == 6 then
-            local r = tonumber(t:sub(1,2), 16)
-            local g = tonumber(t:sub(3,4), 16)
-            local b = tonumber(t:sub(5,6), 16)
-            if r and g and b then setColor(Color3.fromRGB(r,g,b)) end
-        end
-        hex.Text = string.format("%02X%02X%02X",
-            math.floor(getter().R*255+0.5), math.floor(getter().G*255+0.5), math.floor(getter().B*255+0.5))
-    end)
-    registerAccent(function(c)
-        swatch.BackgroundColor3 = c
-    end)
+-- ============================================================
+-- BUILD GUI (em função separada para não estourar registradores)
+-- ============================================================
+local function buildGUI()
+	local old = PlayerGui:FindFirstChild("Turbo")
+	if old then old:Destroy() end
+
+	ScreenGui = New("ScreenGui", {
+		Name = "Turbo", ResetOnSpawn = false, IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	}, PlayerGui)
+
+	Main = New("Frame", {
+		Size = UDim2.fromOffset(860, 560),
+		Position = UDim2.new(0.5, -410, 0.5, -270),
+		BackgroundColor3 = Theme.Bg, BorderSizePixel = 0,
+		Active = true, ClipsDescendants = true,
+	}, ScreenGui)
+	Corner(Main, 12)
+	Stroke(Main)
+
+	Top = New("Frame", {
+		Size = UDim2.new(1, 0, 0, 52), BackgroundColor3 = Theme.Panel, BorderSizePixel = 0, Active = true,
+	}, Main)
+	Corner(Top, 12)
+	New("Frame", {Size = UDim2.new(1, 0, 0, 16), Position = UDim2.new(0, 0, 1, -16), BackgroundColor3 = Theme.Panel, BorderSizePixel = 0}, Top)
+	TopLine = New("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Accent, BorderSizePixel = 0}, Top)
+
+	Title = Label(Top, "Turbo", 20, Theme.Accent, true)
+	Title.Position = UDim2.fromOffset(18, 0)
+	Title.Size = UDim2.fromOffset(90, 52)
+	local Sub = Label(Top, "🚀 ·  Character", 12, Theme.SubText)
+	Sub.Position = UDim2.fromOffset(110, 0)
+	Sub.Size = UDim2.fromOffset(260, 52)
+	StatusLbl = Label(Top, "● ACTIVE", 12, Theme.Green, true)
+	StatusLbl.Position = UDim2.new(1, -130, 0, 0)
+	StatusLbl.Size = UDim2.fromOffset(115, 52)
+	StatusLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+	local Side = New("Frame", {
+		Size = UDim2.fromOffset(200, 568), Position = UDim2.fromOffset(0, 52),
+		BackgroundColor3 = Theme.Panel, BorderSizePixel = 0,
+	}, Main)
+	New("Frame", {Size = UDim2.fromOffset(1, 568), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = Theme.Stroke, BorderSizePixel = 0}, Side)
+	local TabBox = New("Frame", {
+		Size = UDim2.new(1, -14, 1, -18), Position = UDim2.fromOffset(7, 12), BackgroundTransparency = 1,
+	}, Side)
+	New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, TabBox)
+
+	local Content = New("Frame", {
+		Size = UDim2.new(1, -200, 1, -52), Position = UDim2.fromOffset(200, 52),
+		BackgroundTransparency = 1, ClipsDescendants = true,
+	}, Main)
+
+	local function makePage(name)
+		local sc = New("ScrollingFrame", {
+			Name = name, Size = UDim2.new(1, -18, 1, -18), Position = UDim2.fromOffset(9, 9),
+			BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5,
+			ScrollBarImageColor3 = Theme.Accent, CanvasSize = UDim2.new(0, 0, 0, 0),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false, ClipsDescendants = true,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			ElasticBehavior = Enum.ElasticBehavior.Never,
+		}, Content)
+		New("UIPadding", {
+			PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 8),
+			PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 14),
+		}, sc)
+		local row = New("Frame", {
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundTransparency = 1, ClipsDescendants = false,
+		}, sc)
+		local L = New("Frame", {
+			Name = "L", Size = UDim2.new(0.5, -7, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundTransparency = 1, ClipsDescendants = false,
+		}, row)
+		New("UIListLayout", {Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder}, L)
+		local R = New("Frame", {
+			Name = "R", Size = UDim2.new(0.5, -7, 0, 0), Position = UDim2.new(0.5, 7, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ClipsDescendants = false,
+		}, row)
+		New("UIListLayout", {Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder}, R)
+		Pages[name] = {sc = sc, L = L, R = R}
+		return Pages[name]
+	end
+
+	local function selectTab(name)
+		currentTab = name
+		for n, p in pairs(Pages) do p.sc.Visible = (n == name) end
+		for n, b in pairs(TabBtns) do
+			local on = n == name
+			b.BackgroundTransparency = on and 0 or 1
+			b.BackgroundColor3 = Theme.Element
+			local ind = b:FindFirstChild("Ind")
+			if ind then ind.Visible = on end
+			local ic = b:FindFirstChild("IconImg")
+			if ic and ic:IsA("ImageLabel") then
+				ic.ImageColor3 = on and Theme.Accent or Theme.SubText
+			end
+			local tx = b:FindFirstChild("TabText")
+			if tx then tx.TextColor3 = on and Theme.Text or Theme.SubText end
+		end
+	end
+
+	local function makeTab(name, iconName, order)
+		local b = New("TextButton", {
+			Size = UDim2.new(1, 0, 0, 62), BackgroundColor3 = Theme.Element,
+			BackgroundTransparency = 1, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
+			LayoutOrder = order, Active = true,
+		}, TabBox)
+		Corner(b, 8)
+		local ind = New("Frame", {
+			Name = "Ind", Size = UDim2.fromOffset(4, 36), Position = UDim2.new(0, 0, 0.5, -18),
+			BackgroundColor3 = Theme.Accent, BorderSizePixel = 0, Visible = false,
+		}, b)
+		Corner(ind, 2)
+		table.insert(accentElements, ind)
+		local asset = getIcon(iconName)
+		if asset then
+			New("ImageLabel", {
+				Name = "IconImg", Size = UDim2.fromOffset(65, 65), Position = UDim2.fromOffset(8, 0),
+				BackgroundTransparency = 1, Image = asset, ImageColor3 = Theme.SubText,
+				ScaleType = Enum.ScaleType.Fit, ResampleMode = Enum.ResamplerMode.Default,
+			}, b)
+		else
+			local fallback = Label(b, "●", 22, Theme.SubText, true)
+			fallback.Name = "IconImg"
+			fallback.Size = UDim2.fromOffset(50, 62)
+			fallback.Position = UDim2.fromOffset(10, 0)
+			fallback.TextXAlignment = Enum.TextXAlignment.Center
+		end
+		local tx = Label(b, name, 14, Theme.SubText, true)
+		tx.Name = "TabText"
+		tx.Position = UDim2.fromOffset(64, 0)
+		tx.Size = UDim2.new(1, -72, 1, 0)
+		b.Activated:Connect(function() selectTab(name) end)
+		TabBtns[name] = b
+	end
+
+	makeTab("Character", "character", 1)
+	makeTab("AimParts", "aim_parts", 2)
+	makeTab("Whitelist", "whitelist", 3)
+	makeTab("Settings", "settings", 4)
+	makeTab("Config", "config", 5)
+
+	local pCL = makePage("Character")
+	local pAP = makePage("AimParts")
+	local pWL = makePage("Whitelist")
+	local pST = makePage("Settings")
+	local pCF = makePage("Config")
+
+	local function Card(parent, title, iconName)
+		local f = New("Frame", {
+			Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = Theme.Panel, BorderSizePixel = 0, ClipsDescendants = false,
+		}, parent)
+		Corner(f, 10)
+		Stroke(f)
+		local hdr = New("Frame", {Size = UDim2.new(1, 0, 0, 46), BackgroundTransparency = 1}, f)
+		local asset = iconName and getIcon(iconName)
+		local titleX = 14
+		if asset then
+			local ic = New("ImageLabel", {
+				Size = UDim2.fromOffset(63, 63), Position = UDim2.fromOffset(11, -5),
+				BackgroundTransparency = 1, Image = asset, ImageColor3 = Theme.Accent,
+				ScaleType = Enum.ScaleType.Fit, ResampleMode = Enum.ResamplerMode.Default,
+			}, hdr)
+			table.insert(accentElements, ic)
+			titleX = 56
+		end
+		local t = Label(hdr, title, 14, Theme.Text, true)
+		t.Position = UDim2.fromOffset(titleX, 0)
+		t.Size = UDim2.new(1, -titleX - 10, 1, 0)
+		local accentLine = New("Frame", {
+			Size = UDim2.new(1, -28, 0, 2), Position = UDim2.fromOffset(14, 44),
+			BackgroundColor3 = Theme.Accent, BorderSizePixel = 0,
+		}, hdr)
+		table.insert(accentElements, accentLine)
+		local body = New("Frame", {
+			Size = UDim2.new(1, -18, 0, 0), Position = UDim2.fromOffset(9, 50),
+			AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ClipsDescendants = false,
+		}, f)
+		New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, body)
+		New("UIPadding", {PaddingBottom = UDim.new(0, 10)}, body)
+		return body
+	end
+
+	local function Toggle(parent, text, getter, setter)
+		local row = New("Frame", {Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1}, parent)
+		Label(row, text, 13, Theme.Text).Size = UDim2.new(1, -58, 1, 0)
+		local btn = New("TextButton", {
+			Size = UDim2.fromOffset(44, 24), Position = UDim2.new(1, -44, 0.5, -12),
+			BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
+		}, row)
+		Corner(btn, 12)
+		local cir = New("Frame", {
+			Size = UDim2.fromOffset(16, 16), Position = UDim2.fromOffset(4, 4),
+			BackgroundColor3 = Theme.SubText, BorderSizePixel = 0,
+		}, btn)
+		Corner(cir, 8)
+		local function upd()
+			local on = getter()
+			if on then
+				Tween(btn, {BackgroundColor3 = Theme.Accent})
+				Tween(cir, {Position = UDim2.new(1, -20, 0, 4), BackgroundColor3 = Color3.new(1,1,1)})
+			else
+				Tween(btn, {BackgroundColor3 = Theme.Element})
+				Tween(cir, {Position = UDim2.fromOffset(4, 4), BackgroundColor3 = Theme.SubText})
+			end
+		end
+		upd()
+		btn.Activated:Connect(function() setter(not getter()); upd() end)
+		table.insert(toggleUpdaters, upd)
+	end
+
+	local function Slider(parent, text, min, max, dec, getter, setter)
+		dec = dec or 1
+		local row = New("Frame", {Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1}, parent)
+		Label(row, text, 13, Theme.Text).Size = UDim2.new(1, -70, 0, 20)
+		local box = New("TextBox", {
+			Size = UDim2.fromOffset(62, 20), Position = UDim2.new(1, -62, 0, 0),
+			BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text, Text = "",
+			TextSize = 12, Font = Enum.Font.GothamMedium, ClearTextOnFocus = false, BorderSizePixel = 0,
+		}, row)
+		Corner(box, 5)
+		local bar = New("Frame", {
+			Size = UDim2.new(1, 0, 0, 12), Position = UDim2.fromOffset(0, 30),
+			BackgroundColor3 = Theme.Element, BorderSizePixel = 0,
+		}, row)
+		Corner(bar, 4)
+		local fill = New("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Accent, BorderSizePixel = 0}, bar)
+		Corner(fill, 4)
+		table.insert(accentElements, fill)
+		local knob = New("Frame", {
+			Size = UDim2.fromOffset(17, 17), AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0, 0, 0.5, 0), BackgroundColor3 = Color3.new(1,1,1), BorderSizePixel = 0, ZIndex = 2,
+		}, bar)
+		Corner(knob, 20)
+		local stroke = New("UIStroke", {Color = Theme.Accent, Thickness = 2.5, Transparency = 0.25}, knob)
+		table.insert(knobStrokes, stroke)
+		local function fmt(v)
+			if dec == 0 then return tostring(math.floor(v + 0.5)) end
+			return string.format("%." .. dec .. "f", v)
+		end
+		local function setV(v, fire)
+			v = math.clamp(v, min, max)
+			if dec == 0 then v = math.floor(v + 0.5)
+			else local m = 10 ^ dec; v = math.floor(v * m + 0.5) / m end
+			local a = (max == min) and 0 or (v - min) / (max - min)
+			fill.Size = UDim2.new(a, 0, 1, 0)
+			knob.Position = UDim2.new(a, 0, 0.5, 0)
+			box.Text = fmt(v)
+			if fire then setter(v) end
+		end
+		setV(getter(), false)
+		local drag = false
+		local function fromMouse()
+			local mx = UserInputService:GetMouseLocation().X
+			local left = bar.AbsolutePosition.X
+			local w = math.max(bar.AbsoluteSize.X, 1)
+			setV(min + (max - min) * math.clamp((mx - left) / w, 0, 1), true)
+		end
+		bar.InputBegan:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = true; fromMouse() end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if drag and i.UserInputType == Enum.UserInputType.MouseMovement then fromMouse() end
+		end)
+		UserInputService.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
+		end)
+		box.FocusLost:Connect(function()
+			local n = tonumber(box.Text)
+			if n then setV(n, true) else setV(getter(), false) end
+		end)
+	end
+
+	local function Dropdown(parent, text, options, getter, setter)
+		local row = New("Frame", {
+			Size = UDim2.new(1, 0, 0, 54), BackgroundTransparency = 1, ZIndex = 20, ClipsDescendants = false,
+		}, parent)
+		Label(row, text, 13, Theme.Text).Size = UDim2.new(1, 0, 0, 20)
+		local btn = New("TextButton", {
+			Size = UDim2.new(1, 0, 0, 30), Position = UDim2.fromOffset(0, 22),
+			BackgroundColor3 = Theme.Element, Text = "  " .. tostring(getter()),
+			TextColor3 = Theme.Text, TextSize = 12, Font = Enum.Font.GothamMedium,
+			TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 21,
+		}, row)
+		Corner(btn, 6)
+		local listH = math.min(#options * 28, 168)
+		local list = New("Frame", {
+			Size = UDim2.fromOffset(220, listH), BackgroundColor3 = Theme.Panel2,
+			BorderSizePixel = 0, Visible = false, ZIndex = 300, ClipsDescendants = true,
+		}, ScreenGui)
+		Corner(list, 6)
+		Stroke(list)
+		New("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, list)
+		table.insert(AllLists, list)
+		local function place()
+			local ap, as = btn.AbsolutePosition, btn.AbsoluteSize
+			list.Size = UDim2.fromOffset(math.max(as.X, 180), listH)
+			local vy = camera.ViewportSize.Y
+			local y = ap.Y + as.Y + 4
+			if y + listH > vy then y = ap.Y - listH - 4 end
+			list.Position = UDim2.fromOffset(ap.X, math.clamp(y, 0, math.max(0, vy - listH)))
+		end
+		for i, opt in ipairs(options) do
+			local o = New("TextButton", {
+				Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
+				Text = "  " .. tostring(opt), TextColor3 = Theme.Text, TextSize = 12,
+				Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
+				AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i, ZIndex = 301,
+			}, list)
+			o.Activated:Connect(function()
+				setter(opt)
+				btn.Text = "  " .. tostring(getter())
+				closeLists()
+			end)
+			o.MouseEnter:Connect(function() o.BackgroundTransparency = 0; o.BackgroundColor3 = Theme.Element end)
+			o.MouseLeave:Connect(function() o.BackgroundTransparency = 1 end)
+		end
+		btn.Activated:Connect(function()
+			if list.Visible then closeLists()
+			else closeLists(); place(); list.Visible = true; OpenList = list end
+		end)
+	end
+
+	local function Bind(parent, text, getter, setter)
+		local row = New("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, ZIndex = 30}, parent)
+		Label(row, text, 13, Theme.Text).Size = UDim2.new(1, -110, 1, 0)
+		local btn = New("TextButton", {
+			Size = UDim2.fromOffset(100, 28), Position = UDim2.new(1, -100, 0.5, -14),
+			BackgroundColor3 = Theme.Element, Text = getter().Name, TextColor3 = Theme.Text,
+			TextSize = 12, Font = Enum.Font.GothamMedium, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 31,
+		}, row)
+		Corner(btn, 6)
+		btn.Activated:Connect(function()
+			if Binding == btn then Binding = nil; btn.Text = getter().Name; btn.TextColor3 = Theme.Text
+			else Binding = btn; btn.Text = "..."; btn.TextColor3 = Theme.Accent end
+		end)
+		table.insert(AllBinds, {btn = btn, getter = getter, setter = setter})
+	end
+
+	local AIM_OPTS = {"Root", "Head", "AboveHead", "Torso", "Front", "Back", "Left", "Right", "LeftArm", "RightArm"}
+
+	-- Character
+	do
+		local cM = Card(pCL.L, "Methods", "methods")
+		Dropdown(cM, "Rotate Method",
+			{"CFrame", "Align", "Align2", "BodyGyro", "AngularVel", "Torque", "Motor6D", "Assembly"},
+			function() return Config.RotateMode end, function(v) Config.RotateMode = v end)
+
+		local cD = Card(pCL.L, "Deadzone", "deadzone")
+		Slider(cD, "Deadzone (deg)", 0, 180, 0, function() return Config.TurnDeadzoneDegrees end, function(v) Config.TurnDeadzoneDegrees = v end)
+		Toggle(cD, "Zero While Holding", function() return Config.ZeroDeadzoneWhenHolding end, function(v) Config.ZeroDeadzoneWhenHolding = v end)
+
+		local cP = Card(pCL.L, "Prediction", "prediction")
+		Toggle(cP, "Enabled", function() return Config.UsePrediction end, function(v) Config.UsePrediction = v end)
+		Slider(cP, "Strength", 0, 1, 3, function() return Config.PredictionStrength end, function(v) Config.PredictionStrength = v end)
+		Slider(cP, "Max Speed", 1, 300, 0, function() return Config.PredictionMaxSpeed end, function(v) Config.PredictionMaxSpeed = v end)
+		Slider(cP, "History Smooth", 1, 60, 0, function() return Config.PredictionHistorySmoothing end, function(v) Config.PredictionHistorySmoothing = v end)
+
+		local cS = Card(pCL.R, "Smooth", "smooth")
+		Slider(cS, "Aim Smooth", 0, 0.99, 2, function() return Config.AimSmooth end, function(v) Config.AimSmooth = v end)
+		Toggle(cS, "Smooth Turn", function() return Config.UseSmoothTurn end, function(v) Config.UseSmoothTurn = v end)
+		Slider(cS, "Turn Time", 0.01, 1, 3, function() return Config.Smoothness end, function(v) Config.Smoothness = v end)
+
+		local cDe = Card(pCL.R, "Delay / Behind", "delay")
+		Slider(cDe, "Behind Hold Delay", 0, 2, 2, function() return Config.BehindHoldDelay end, function(v) Config.BehindHoldDelay = v end)
+		Slider(cDe, "Behind Distance", 0, 20, 1, function() return Config.BehindDistance end, function(v) Config.BehindDistance = v end)
+		Slider(cDe, "Behind Smooth", 0, 0.5, 3, function() return Config.BehindSmoothTime end, function(v) Config.BehindSmoothTime = v end)
+		Toggle(cDe, "Enable Teleport", function() return Config.EnableTeleport end, function(v) Config.EnableTeleport = v end)
+
+		local cR = Card(pCL.R, "Retargets", "crosshair")
+		Toggle(cR, "Block Retarget", function() return Config.BlockRetargetClosest end, function(v) Config.BlockRetargetClosest = v end)
+		Toggle(cR, "Skill Retarget", function() return Config.SkillRetargetClosest end, function(v) Config.SkillRetargetClosest = v end)
+		Toggle(cR, "Mouse Retarget", function() return Config.MouseRetargetClosest end, function(v) Config.MouseRetargetClosest = v end)
+		Slider(cR, "Scan Interval", 0, 1, 3, function() return Config.UltraScanInterval end, function(v) Config.UltraScanInterval = v end)
+
+		local cDi = Card(pCL.R, "Distance", "distance")
+		Slider(cDi, "Min Lock Distance", 0, 100, 0, function() return Config.MinLockDistance end, function(v) Config.MinLockDistance = v end)
+		Slider(cDi, "Max Lock Distance", 10, 1000, 0, function() return Config.MaxLockDistance end, function(v) Config.MaxLockDistance = v end)
+
+		local cV = Card(pCL.L, "Validation", "shield")
+		Toggle(cV, "Strong Validation", function() return Config.StrongValidation end, function(v) Config.StrongValidation = v end)
+		Toggle(cV, "Instant Behind Snap", function() return Config.InstantBehindSnap end, function(v) Config.InstantBehindSnap = v end)
+		Toggle(cV, "Ignore Active Counter", function() return Config.IgnoreActiveCounter end, function(v) Config.IgnoreActiveCounter = v end)
+	end
+
+	-- AimParts
+	do
+		local function aimCard(col, source, title, icon, keyGet, keySet)
+			local c = Card(col, title, icon)
+			if keyGet and keySet then
+				Bind(c, "Key", keyGet, keySet)
+			end
+			Dropdown(c, "Aim Part", AIM_OPTS,
+				function() return Config.AimPointBySource[source] or "Root" end,
+				function(v) Config.AimPointBySource[source] = v end)
+			Slider(c, "Offset", -10, 10, 2,
+				function() return Config.AimOffsetBySource[source] or 0 end,
+				function(v) Config.AimOffsetBySource[source] = v end)
+		end
+
+		aimCard(pAP.L, "block", "Block", "block",
+			function() return Config.BlockKey or Enum.KeyCode.F end,
+			function(v) Config.BlockKey = v end)
+		aimCard(pAP.L, "skill", "Skill", "aim", nil, nil)
+		aimCard(pAP.L, "mouse", "M1 (Mouse)", "mouse", nil, nil)
+		aimCard(pAP.R, "q", "Behind", "behind",
+			function() return Config.BehindKey end,
+			function(v) Config.BehindKey = v end)
+		aimCard(pAP.R, "priority", "Priority", "priority",
+			function() return Config.PriorityKey end,
+			function(v) Config.PriorityKey = v end)
+		aimCard(pAP.R, "sticky", "Sticky", "always",
+			function() return Config.StickyLockKey end,
+			function(v) Config.StickyLockKey = v end)
+
+		local cDef = Card(pAP.R, "Default / Above Head", "body_parts")
+		Dropdown(cDef, "Default Aim Part", AIM_OPTS,
+			function() return Config.AimPointBySource.default end,
+			function(v) Config.AimPointBySource.default = v end)
+		Slider(cDef, "Default Offset", -10, 10, 2,
+			function() return Config.AimOffsetBySource.default end,
+			function(v) Config.AimOffsetBySource.default = v end)
+		Slider(cDef, "Above Head Height", 0, 5, 2,
+			function() return Config.AboveHeadHeight end,
+			function(v) Config.AboveHeadHeight = v end)
+	end
+
+	-- Whitelist
+	do
+		local cAlly = Card(pWL.L, "Ally Filter", "eye")
+		Toggle(cAlly, "Whitelist Allies", function() return Config.IgnoreAllies.Enabled end, function(v) Config.IgnoreAllies.Enabled = v; rebuildAllyCache() end)
+		Dropdown(cAlly, "Mode", {"UserId", "Name"},
+			function() return Config.IgnoreAllies.UseUserId and "UserId" or "Name" end,
+			function(v) Config.IgnoreAllies.UseUserId = (v == "UserId"); rebuildAllyCache() end)
+
+		local cPl = Card(pWL.R, "Players in Server", "contacts")
+		local plScroll = New("ScrollingFrame", {
+			Size = UDim2.new(1, 0, 0, 320), BackgroundTransparency = 1, BorderSizePixel = 0,
+			ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.Accent,
+			CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		}, cPl)
+		New("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.Name}, plScroll)
+
+		local function isWL(plr)
+			if Config.IgnoreAllies.UseUserId then
+				for _, id in ipairs(Config.IgnoreAllies.UserIds) do if tonumber(id) == plr.UserId then return true end end
+			else
+				local w = string.lower(plr.Name)
+				for _, n in ipairs(Config.IgnoreAllies.Names) do if string.lower(tostring(n)) == w then return true end end
+			end
+			return false
+		end
+		local function setWL(plr, val)
+			if Config.IgnoreAllies.UseUserId then
+				local ids = Config.IgnoreAllies.UserIds
+				for i = #ids, 1, -1 do if tonumber(ids[i]) == plr.UserId then table.remove(ids, i) end end
+				if val then table.insert(ids, plr.UserId) end
+			else
+				local names = Config.IgnoreAllies.Names
+				for i = #names, 1, -1 do if string.lower(tostring(names[i])) == string.lower(plr.Name) then table.remove(names, i) end end
+				if val then table.insert(names, plr.Name) end
+			end
+			rebuildAllyCache()
+		end
+		local function rebuildPL()
+			for _, c in ipairs(plScroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr ~= player then
+					local on = isWL(plr)
+					local b = New("TextButton", {
+						Size = UDim2.new(1, -4, 0, 30), BackgroundColor3 = on and Color3.fromRGB(40, 70, 50) or Theme.Element,
+						BorderSizePixel = 0, Text = "  " .. plr.Name .. (on and "  ✓" or ""),
+						TextColor3 = Theme.Text, TextSize = 12, Font = Enum.Font.GothamMedium,
+						TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false,
+					}, plScroll)
+					Corner(b, 6)
+					b.Activated:Connect(function()
+						setWL(plr, not isWL(plr))
+						local now = isWL(plr)
+						b.BackgroundColor3 = now and Color3.fromRGB(40, 70, 50) or Theme.Element
+						b.Text = "  " .. plr.Name .. (now and "  ✓" or "")
+					end)
+				end
+			end
+		end
+		rebuildPL()
+		Players.PlayerAdded:Connect(rebuildPL)
+		Players.PlayerRemoving:Connect(rebuildPL)
+	end
+
+	-- Settings
+	do
+		local cPrio = Card(pST.L, "Target Priority", "target")
+		Dropdown(cPrio, "Priority", {"Players", "NPC", "Closest"},
+			function() return Config.TargetPriority end, function(v) Config.TargetPriority = v end)
+
+		local cKeys = Card(pST.L, "Hotkeys", "keyboard")
+		Bind(cKeys, "Menu Key", function() return Config.ToggleKey end, function(v) Config.ToggleKey = v end)
+		Bind(cKeys, "Enable Lock Key", function() return Config.EnableLockKey end, function(v) Config.EnableLockKey = v end)
+		Bind(cKeys, "Panic Key", function() return Config.PanicKey end, function(v) Config.PanicKey = v end)
+		Bind(cKeys, "Sticky Key", function() return Config.StickyLockKey end, function(v) Config.StickyLockKey = v end)
+		Bind(cKeys, "Behind Key", function() return Config.BehindKey end, function(v) Config.BehindKey = v end)
+		Bind(cKeys, "Priority Key", function() return Config.PriorityKey end, function(v) Config.PriorityKey = v end)
+
+		local cTime = Card(pST.R, "Lock Timing", "hourglass")
+		Slider(cTime, "Hold Threshold (skill key)", 0, 4, 2, function() return Config.HoldThreshold end, function(v) Config.HoldThreshold = v end)
+		Slider(cTime, "Click Duration (skill)", 0, 4, 2, function() return Config.ClickLockDuration end, function(v) Config.ClickLockDuration = v end)
+		Slider(cTime, "Hold Threshold (mouse)", 0, 4, 2, function() return Config.MouseHoldThreshold end, function(v) Config.MouseHoldThreshold = v end)
+		Slider(cTime, "Click Duration (mouse)", 0, 4, 2, function() return Config.MouseClickLockDuration end, function(v) Config.MouseClickLockDuration = v end)
+
+		local cLK = Card(pST.R, "Lock Keys", "bind")
+		Toggle(cLK, "Use Mouse Button 1", function() return Config.UseMouseButton1 end, function(v) Config.UseMouseButton1 = v end)
+
+		local keyRow = New("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1}, cLK)
+		New("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, keyRow)
+		local commons = {{Enum.KeyCode.One,"1"},{Enum.KeyCode.Two,"2"},{Enum.KeyCode.Three,"3"},{Enum.KeyCode.Four,"4"},{Enum.KeyCode.F,"F"},{Enum.KeyCode.E,"E"},{Enum.KeyCode.R,"R"},{Enum.KeyCode.G,"G"}}
+		local function inLK(k)
+			for _, x in ipairs(Config.LockKeys) do if x == k then return true end end
+			return false
+		end
+		local function togLK(k)
+			for i, x in ipairs(Config.LockKeys) do if x == k then table.remove(Config.LockKeys, i) return end end
+			table.insert(Config.LockKeys, k)
+		end
+		for i, e in ipairs(commons) do
+			local k, n = e[1], e[2]
+			local b = New("TextButton", {
+				Size = UDim2.fromOffset(38, 30), BackgroundColor3 = inLK(k) and Theme.Accent or Theme.Element,
+				BorderSizePixel = 0, Text = n, TextColor3 = Theme.Text, TextSize = 13,
+				Font = Enum.Font.GothamBold, AutoButtonColor = false, LayoutOrder = i,
+			}, keyRow)
+			Corner(b, 6)
+			b.Activated:Connect(function()
+				togLK(k)
+				b.BackgroundColor3 = inLK(k) and Theme.Accent or Theme.Element
+			end)
+			table.insert(lockKeyButtons, {btn = b, key = k})
+		end
+
+		local cPanic = Card(pST.L, "Panic", "panic")
+		local panicInfo = Label(cPanic, "Panic Key destroys the GUI and fully disables the lock until you re-execute the script.", 12, Theme.SubText)
+		panicInfo.Size = UDim2.new(1, 0, 0, 44)
+		panicInfo.TextWrapped = true
+		panicInfo.TextYAlignment = Enum.TextYAlignment.Top
+
+		local cTheme = Card(pST.R, "Appearance", "dashboard")
+		-- ColorPicker simplificado
+		local row = New("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1}, cTheme)
+		Label(row, "Accent Color", 13, Theme.Text).Size = UDim2.new(1, -130, 1, 0)
+		local swatch = New("TextButton", {
+			Size = UDim2.fromOffset(32, 24), Position = UDim2.new(1, -122, 0.5, -12),
+			BackgroundColor3 = Theme.Accent, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
+		}, row)
+		Corner(swatch, 5)
+		Stroke(swatch, Theme.Stroke, 1)
+		local hex = New("TextBox", {
+			Size = UDim2.fromOffset(84, 24), Position = UDim2.new(1, -84, 0.5, -12),
+			BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text, TextSize = 11,
+			Font = Enum.Font.GothamMedium, ClearTextOnFocus = false, BorderSizePixel = 0,
+			Text = string.format("%02X%02X%02X",
+				math.floor(Theme.Accent.R*255+0.5), math.floor(Theme.Accent.G*255+0.5), math.floor(Theme.Accent.B*255+0.5)),
+		}, row)
+		Corner(hex, 5)
+
+		local presets = {
+			Color3.fromRGB(220, 55, 70),
+			Color3.fromRGB(90, 120, 255),
+			Color3.fromRGB(160, 80, 255),
+			Color3.fromRGB(70, 200, 120),
+			Color3.fromRGB(255, 160, 40),
+			Color3.fromRGB(0, 200, 220),
+			Color3.fromRGB(255, 80, 160),
+			Color3.fromRGB(240, 240, 245),
+		}
+		local pop = New("Frame", {
+			Size = UDim2.fromOffset(180, 76), BackgroundColor3 = Theme.Panel2,
+			BorderSizePixel = 0, Visible = false, ZIndex = 320,
+		}, ScreenGui)
+		Corner(pop, 7)
+		Stroke(pop)
+		New("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Left,
+			VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 5),
+			SortOrder = Enum.SortOrder.LayoutOrder, Wraps = true,
+		}, pop)
+		New("UIPadding", {PaddingLeft = UDim.new(0, 7), PaddingTop = UDim.new(0, 7), PaddingRight = UDim.new(0, 7)}, pop)
+		table.insert(AllLists, pop)
+
+		local function setColor(c)
+			Theme.Accent = c
+			swatch.BackgroundColor3 = c
+			hex.Text = string.format("%02X%02X%02X",
+				math.floor(c.R*255+0.5), math.floor(c.G*255+0.5), math.floor(c.B*255+0.5))
+			applyAccent(c)
+			pop.Visible = false
+		end
+		for i, pc in ipairs(presets) do
+			local b = New("TextButton", {
+				Size = UDim2.fromOffset(20, 20), BackgroundColor3 = pc, BorderSizePixel = 0,
+				Text = "", AutoButtonColor = false, LayoutOrder = i, ZIndex = 321,
+			}, pop)
+			Corner(b, 5)
+			b.Activated:Connect(function() setColor(pc) end)
+		end
+		swatch.Activated:Connect(function()
+			if pop.Visible then pop.Visible = false; return end
+			closeLists()
+			local ap = swatch.AbsolutePosition
+			pop.Position = UDim2.fromOffset(ap.X - 40, ap.Y + 28)
+			pop.Visible = true
+			OpenList = pop
+		end)
+		hex.FocusLost:Connect(function()
+			local t = hex.Text:gsub("#", "")
+			if #t == 6 then
+				local r = tonumber(t:sub(1,2), 16)
+				local g = tonumber(t:sub(3,4), 16)
+				local b = tonumber(t:sub(5,6), 16)
+				if r and g and b then setColor(Color3.fromRGB(r,g,b)) end
+			end
+			hex.Text = string.format("%02X%02X%02X",
+				math.floor(Theme.Accent.R*255+0.5), math.floor(Theme.Accent.G*255+0.5), math.floor(Theme.Accent.B*255+0.5))
+		end)
+	end
+
+	-- Config
+	do
+		local function ser()
+			local keys = {}
+			for _, k in ipairs(Config.LockKeys) do table.insert(keys, k.Name) end
+			return {
+				RotateMode = Config.RotateMode, TurnDeadzoneDegrees = Config.TurnDeadzoneDegrees,
+				ZeroDeadzoneWhenHolding = Config.ZeroDeadzoneWhenHolding, UsePrediction = Config.UsePrediction,
+				PredictionStrength = Config.PredictionStrength, PredictionMaxSpeed = Config.PredictionMaxSpeed,
+				PredictionHistorySmoothing = Config.PredictionHistorySmoothing,
+				AimPointBySource = Config.AimPointBySource, AimOffsetBySource = Config.AimOffsetBySource,
+				AboveHeadHeight = Config.AboveHeadHeight, AimSmooth = Config.AimSmooth,
+				UseSmoothTurn = Config.UseSmoothTurn, Smoothness = Config.Smoothness,
+				BehindHoldDelay = Config.BehindHoldDelay, BehindDistance = Config.BehindDistance,
+				BehindSmoothTime = Config.BehindSmoothTime, EnableTeleport = Config.EnableTeleport,
+				BlockRetargetClosest = Config.BlockRetargetClosest, SkillRetargetClosest = Config.SkillRetargetClosest,
+				MouseRetargetClosest = Config.MouseRetargetClosest, UltraScanInterval = Config.UltraScanInterval,
+				MinLockDistance = Config.MinLockDistance, MaxLockDistance = Config.MaxLockDistance,
+				StrongValidation = Config.StrongValidation, InstantBehindSnap = Config.InstantBehindSnap,
+				IgnoreActiveCounter = Config.IgnoreActiveCounter, TargetPriority = Config.TargetPriority,
+				ToggleKey = Config.ToggleKey.Name, EnableLockKey = Config.EnableLockKey.Name,
+				PanicKey = Config.PanicKey.Name, StickyLockKey = Config.StickyLockKey.Name,
+				BehindKey = Config.BehindKey.Name, PriorityKey = Config.PriorityKey.Name,
+				BlockKey = (Config.BlockKey or Enum.KeyCode.F).Name,
+				HoldThreshold = Config.HoldThreshold, ClickLockDuration = Config.ClickLockDuration,
+				MouseHoldThreshold = Config.MouseHoldThreshold, MouseClickLockDuration = Config.MouseClickLockDuration,
+				UseMouseButton1 = Config.UseMouseButton1, LockKeys = keys,
+				IgnoreAllies = Config.IgnoreAllies,
+				Accent = {math.floor(Theme.Accent.R*255+0.5), math.floor(Theme.Accent.G*255+0.5), math.floor(Theme.Accent.B*255+0.5)},
+			}
+		end
+		local function toKey(s)
+			local ok, k = pcall(function() return Enum.KeyCode[s] end)
+			return (ok and k) or Enum.KeyCode.Unknown
+		end
+		local function apply(data)
+			if type(data) ~= "table" then return false end
+			for k, v in pairs(data) do
+				if k == "LockKeys" and type(v) == "table" then
+					Config.LockKeys = {}
+					for _, n in ipairs(v) do local kk = toKey(n); if kk ~= Enum.KeyCode.Unknown then table.insert(Config.LockKeys, kk) end end
+				elseif k == "AimPointBySource" or k == "AimOffsetBySource" or k == "IgnoreAllies" then
+					if type(v) == "table" then Config[k] = v end
+				elseif type(Config[k]) == "EnumItem" or k:find("Key") then
+					Config[k] = toKey(v)
+				elseif Config[k] ~= nil then
+					Config[k] = v
+				end
+			end
+			if type(data.Accent) == "table" and #data.Accent >= 3 then
+				applyAccent(Color3.fromRGB(data.Accent[1], data.Accent[2], data.Accent[3]))
+			end
+			rebuildAllyCache()
+			return true
+		end
+
+		local cSave = Card(pCF.L, "Save / Load", "file")
+		local stLbl = Label(cSave, "Status: ready", 12, Theme.SubText)
+		stLbl.Size = UDim2.new(1, 0, 0, 20)
+		local function mkBtn(parent, text, col, fn)
+			local b = New("TextButton", {
+				Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = col or Theme.Accent,
+				BorderSizePixel = 0, Text = text, TextColor3 = Color3.new(1,1,1),
+				TextSize = 13, Font = Enum.Font.GothamBold, AutoButtonColor = false,
+			}, parent)
+			Corner(b, 7)
+			b.Activated:Connect(fn)
+			return b
+		end
+		mkBtn(cSave, "Save Config", Theme.Accent, function()
+			local ok, err = pcall(function()
+				local json = HttpService:JSONEncode(ser())
+				if type(writefile) == "function" then writefile("TurboLockConfig.json", json)
+				elseif type(setclipboard) == "function" then setclipboard(json); error("no writefile — copied to clipboard") 
+				else error("no writefile") end
+			end)
+			stLbl.Text = ok and "Status: saved" or ("Status: " .. tostring(err))
+			stLbl.TextColor3 = ok and Theme.Green or Theme.Red
+		end)
+		mkBtn(cSave, "Load Config", Color3.fromRGB(160, 50, 60), function()
+			local ok, err = pcall(function()
+				if type(readfile) ~= "function" then error("no readfile") end
+				local data = HttpService:JSONDecode(readfile("TurboLockConfig.json"))
+				if not apply(data) then error("apply failed") end
+			end)
+			stLbl.Text = ok and "Status: loaded" or ("Status: " .. tostring(err))
+			stLbl.TextColor3 = ok and Theme.Green or Theme.Red
+		end)
+
+		local cInfo = Card(pCF.R, "Info", "info")
+		local info = Label(cInfo, "Icons load from GitHub (Turbo/Images).\n\nPanic Key fully kills the script GUI + lock.\n\nAim Parts: set part + offset per source.", 12, Theme.SubText)
+		info.Size = UDim2.new(1, 0, 0, 120)
+		info.TextWrapped = true
+		info.TextYAlignment = Enum.TextYAlignment.Top
+	end
+
+	-- Drag
+	do
+		local dragging, start, spos
+		Top.InputBegan:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; start = i.Position; spos = Main.Position end
+		end)
+		Top.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+				local d = i.Position - start
+				Main.Position = UDim2.new(spos.X.Scale, spos.X.Offset + d.X, spos.Y.Scale, spos.Y.Offset + d.Y)
+			end
+		end)
+	end
+
+	for _, p in pairs(Pages) do
+		p.sc:GetPropertyChangedSignal("CanvasPosition"):Connect(closeLists)
+	end
+
+	selectTab("Character")
 end
 
-local cTheme = Card(pST.R, "Appearance", "dashboard")
-ColorPicker(cTheme, "Accent Color", function() return Theme.Accent end, function(v) Theme.Accent = v end)
+buildGUI()
 
-
--- ===== Config Save/Load =====
-local function ser()
-    local keys = {}
-    for _, k in ipairs(Config.LockKeys) do table.insert(keys, k.Name) end
-    return {
-        RotateMode = Config.RotateMode, TurnDeadzoneDegrees = Config.TurnDeadzoneDegrees,
-        ZeroDeadzoneWhenHolding = Config.ZeroDeadzoneWhenHolding, UsePrediction = Config.UsePrediction,
-        PredictionStrength = Config.PredictionStrength, PredictionMaxSpeed = Config.PredictionMaxSpeed,
-        PredictionHistorySmoothing = Config.PredictionHistorySmoothing,
-        AimPointBySource = Config.AimPointBySource, AimOffsetBySource = Config.AimOffsetBySource,
-        AboveHeadHeight = Config.AboveHeadHeight, AimSmooth = Config.AimSmooth,
-        UseSmoothTurn = Config.UseSmoothTurn, Smoothness = Config.Smoothness,
-        BehindHoldDelay = Config.BehindHoldDelay, BehindDistance = Config.BehindDistance,
-        BehindSmoothTime = Config.BehindSmoothTime, EnableTeleport = Config.EnableTeleport,
-        BlockRetargetClosest = Config.BlockRetargetClosest, SkillRetargetClosest = Config.SkillRetargetClosest,
-        MouseRetargetClosest = Config.MouseRetargetClosest, UltraScanInterval = Config.UltraScanInterval,
-        MinLockDistance = Config.MinLockDistance, MaxLockDistance = Config.MaxLockDistance,
-        StrongValidation = Config.StrongValidation, InstantBehindSnap = Config.InstantBehindSnap,
-        IgnoreActiveCounter = Config.IgnoreActiveCounter, TargetPriority = Config.TargetPriority,
-        ToggleKey = Config.ToggleKey.Name, EnableLockKey = Config.EnableLockKey.Name,
-        PanicKey = Config.PanicKey.Name, StickyLockKey = Config.StickyLockKey.Name,
-        BehindKey = Config.BehindKey.Name, PriorityKey = Config.PriorityKey.Name,
-        BlockKey = (Config.BlockKey or Enum.KeyCode.F).Name,
-        HoldThreshold = Config.HoldThreshold, ClickLockDuration = Config.ClickLockDuration,
-        MouseHoldThreshold = Config.MouseHoldThreshold, MouseClickLockDuration = Config.MouseClickLockDuration,
-        UseMouseButton1 = Config.UseMouseButton1, LockKeys = keys,
-        IgnoreAllies = Config.IgnoreAllies,
-        Accent = {math.floor(Theme.Accent.R*255+0.5), math.floor(Theme.Accent.G*255+0.5), math.floor(Theme.Accent.B*255+0.5)},
-    }
-end
-local function toKey(s)
-    local ok, k = pcall(function() return Enum.KeyCode[s] end)
-    return (ok and k) or Enum.KeyCode.Unknown
-end
-local function apply(data)
-    if type(data) ~= "table" then return false end
-    for k, v in pairs(data) do
-        if k == "LockKeys" and type(v) == "table" then
-            Config.LockKeys = {}
-            for _, n in ipairs(v) do local kk = toKey(n); if kk ~= Enum.KeyCode.Unknown then table.insert(Config.LockKeys, kk) end end
-        elseif k == "AimPointBySource" or k == "AimOffsetBySource" or k == "IgnoreAllies" then
-            if type(v) == "table" then Config[k] = v end
-        elseif type(Config[k]) == "EnumItem" or k:find("Key") then
-            Config[k] = toKey(v)
-        elseif Config[k] ~= nil then
-            Config[k] = v
-        end
-    end
-    if type(data.Accent) == "table" and #data.Accent >= 3 then
-        applyAccent(Color3.fromRGB(data.Accent[1], data.Accent[2], data.Accent[3]))
-    end
-    rebuildAllyCache()
-    return true
-end
-
-local cSave = Card(pCF.L, "Save / Load", "file")
-local stLbl = Label(cSave, "Status: ready", 11, Theme.SubText)
-stLbl.Size = UDim2.new(1, 0, 0, 18)
-local function mkBtn(parent, text, col, fn)
-    local b = New("TextButton", {
-        Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = col or Theme.Accent,
-        BorderSizePixel = 0, Text = text, TextColor3 = Color3.new(1,1,1),
-        TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false,
-    }, parent)
-    Corner(b, 6)
-    b.Activated:Connect(fn)
-    return b
-end
-mkBtn(cSave, "Save Config", Theme.Accent, function()
-    local ok, err = pcall(function()
-        local json = HttpService:JSONEncode(ser())
-        if type(writefile) == "function" then writefile("TurboLockConfig.json", json)
-        elseif type(setclipboard) == "function" then setclipboard(json); error("no writefile — copied to clipboard") 
-        else error("no writefile") end
-    end)
-    stLbl.Text = ok and "Status: saved" or ("Status: " .. tostring(err))
-    stLbl.TextColor3 = ok and Theme.Green or Theme.Red
-end)
-mkBtn(cSave, "Load Config", Color3.fromRGB(160, 50, 60), function()
-    local ok, err = pcall(function()
-        if type(readfile) ~= "function" then error("no readfile") end
-        local data = HttpService:JSONDecode(readfile("TurboLockConfig.json"))
-        if not apply(data) then error("apply failed") end
-    end)
-    stLbl.Text = ok and "Status: loaded" or ("Status: " .. tostring(err))
-    stLbl.TextColor3 = ok and Theme.Green or Theme.Red
-    if ok then rebuildPL() end
-end)
-
-local cInfo = Card(pCF.R, "Info", "info")
-local info = Label(cInfo, "Icons load from GitHub (Turbo/Images) — unique per section, 256px sources scaled with Fit.\n\nPanic Key fully kills the script GUI + lock.\n\nAim Parts: set part + offset per source (Block, Skill, M1, Behind, Priority, Sticky).", 11, Theme.SubText)
-info.Size = UDim2.new(1, 0, 0, 110)
-info.TextWrapped = true
-info.TextYAlignment = Enum.TextYAlignment.Top
-
--- Drag
-do
-    local dragging, start, spos
-    Top.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; start = i.Position; spos = Main.Position end
-    end)
-    Top.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-            local d = i.Position - start
-            Main.Position = UDim2.new(spos.X.Scale, spos.X.Offset + d.X, spos.Y.Scale, spos.Y.Offset + d.Y)
-        end
-    end)
-end
-
--- Scroll closes lists
-for _, p in pairs(Pages) do
-    p.sc:GetPropertyChangedSignal("CanvasPosition"):Connect(closeLists)
-end
-
-local MenuOpen = true
 local function clearFocus()
-    local f = UserInputService:GetFocusedTextBox()
-    if f then pcall(function() f:ReleaseFocus() end) end
-    pcall(function() GuiService.SelectedObject = nil end)
+	local f = UserInputService:GetFocusedTextBox()
+	if f then pcall(function() f:ReleaseFocus() end) end
+	pcall(function() GuiService.SelectedObject = nil end)
 end
+
 local function setMenu(v)
-    MenuOpen = v
-    if not v then
-        closeLists()
-        Binding = nil
-        clearFocus()
-        ScreenGui.Enabled = false
-    else
-        ScreenGui.Enabled = true
-        clearFocus()
-    end
+	MenuOpen = v
+	if not v then
+		closeLists()
+		Binding = nil
+		clearFocus()
+		if ScreenGui then ScreenGui.Enabled = false end
+	else
+		if ScreenGui then ScreenGui.Enabled = true end
+		clearFocus()
+	end
 end
 
 local function doPanic()
-    turboPanicked = true
-    lockEnabled = false
-    pcall(hardClearLock)
-    pcall(clearSticky)
-    pcall(function() setRotateEnabled(false) end)
-    closeLists()
-    ScreenGui.Enabled = false
-    ScreenGui:Destroy()
-    print("[Turbo] PANIC — lock disabled, GUI destroyed. Re-execute script to restore.")
+	turboPanicked = true
+	lockEnabled = false
+	pcall(hardClearLock)
+	pcall(clearSticky)
+	pcall(function() setRotateEnabled(false) end)
+	closeLists()
+	if ScreenGui then
+		ScreenGui.Enabled = false
+		ScreenGui:Destroy()
+	end
+	print("[Turbo] PANIC — lock disabled, GUI destroyed. Re-execute script to restore.")
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if turboPanicked then return end
+	if processed then return end
+	if turboPanicked then return end
 
-    if input.KeyCode == Config.PanicKey then
-        doPanic()
-        return
-    end
+	if input.KeyCode == Config.PanicKey then
+		doPanic()
+		return
+	end
 
-    if input.KeyCode == Config.ToggleKey then
-        setMenu(not MenuOpen)
-        return
-    end
+	if input.KeyCode == Config.ToggleKey then
+		setMenu(not MenuOpen)
+		return
+	end
 
-    if Binding then
-        if input.KeyCode == Enum.KeyCode.Escape then
-            Binding.TextColor3 = Theme.Text
-            for _, b in ipairs(AllBinds) do b.btn.Text = b.getter().Name end
-            Binding = nil
-            return
-        end
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            for _, b in ipairs(AllBinds) do
-                if b.btn == Binding then b.setter(input.KeyCode); break end
-            end
-            Binding.Text = input.KeyCode.Name
-            Binding.TextColor3 = Theme.Text
-            Binding = nil
-            clearFocus()
-        end
-    end
+	if Binding then
+		if input.KeyCode == Enum.KeyCode.Escape then
+			Binding.TextColor3 = Theme.Text
+			for _, b in ipairs(AllBinds) do b.btn.Text = b.getter().Name end
+			Binding = nil
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			for _, b in ipairs(AllBinds) do
+				if b.btn == Binding then b.setter(input.KeyCode); break end
+			end
+			Binding.Text = input.KeyCode.Name
+			Binding.TextColor3 = Theme.Text
+			Binding = nil
+			clearFocus()
+		end
+	end
 end)
 
 onLockEnabledChanged = function(en)
-    StatusLbl.Text = en and "● ACTIVE" or "● OFF"
-    StatusLbl.TextColor3 = en and Theme.Green or Theme.Red
+	if StatusLbl then
+		StatusLbl.Text = en and "● ACTIVE" or "● OFF"
+		StatusLbl.TextColor3 = en and Theme.Green or Theme.Red
+	end
 end
 onLockEnabledChanged(lockEnabled)
 
-selectTab("Character")
-setMenu(true)
-
--- Warm icon cache in background
 task.spawn(function()
-    for name in pairs(ICON_FILES) do
-        pcall(getIcon, name)
-        task.wait()
-    end
+	for name in pairs(ICON_FILES) do
+		pcall(getIcon, name)
+		task.wait()
+	end
 end)
 
 print("Turbo GUI v5.1 | Unique Icons | AimParts | Accent | Reduced Pixelation | Panic=" .. Config.PanicKey.Name)
