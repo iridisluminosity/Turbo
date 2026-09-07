@@ -1446,7 +1446,7 @@ local function getIcon(name)
 	if not file then iconCache[name] = false; return nil end
 	local url = ICON_BASE .. file
 	local ok, result = pcall(function()
-		local folder = "TurboIcons"
+		local folder = "Turbo/Images/Icons"
 		if type(isfolder) == "function" and type(makefolder) == "function" then
 			if not isfolder(folder) then pcall(makefolder, folder) end
 		end
