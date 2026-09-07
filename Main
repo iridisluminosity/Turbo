@@ -1935,22 +1935,28 @@ local function buildGUI()
 		end)
 	end
 
+	local function enumDisplay(v)
+		local ok, result = pcall(function() return tostring(v) end)
+		if not ok or not result then return "Unknown" end
+		return result:match("%.([^%.]+)$") or result
+	end
+
 	local function Bind(parent, text, getter, setter)
 		local row = New("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, ZIndex = 30}, parent)
 		Label(row, text, 13, Theme.Text).Size = UDim2.new(1, -110, 1, 0)
 		local btn = New("TextButton", {
 			Size = UDim2.fromOffset(100, 28), Position = UDim2.new(1, -100, 0.5, -14),
-			BackgroundColor3 = Theme.Element, Text = getter().Name, TextColor3 = Theme.Text,
+			BackgroundColor3 = Theme.Element, Text = enumDisplay(getter()), TextColor3 = Theme.Text,
 			TextSize = 12, Font = Enum.Font.GothamMedium, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 31,
 		}, row)
 		Corner(btn, 6)
 		local function updBind()
-			btn.Text = getter().Name
+			btn.Text = enumDisplay(getter())
 		end
 		updBind()
 		table.insert(controlUpdaters, updBind)
 		btn.Activated:Connect(function()
-			if Binding == btn then Binding = nil; btn.Text = getter().Name; btn.TextColor3 = Theme.Text
+			if Binding == btn then Binding = nil; btn.Text = enumDisplay(getter()); btn.TextColor3 = Theme.Text
 			else Binding = btn; btn.Text = "..."; btn.TextColor3 = Theme.Accent end
 		end)
 		table.insert(AllBinds, {btn = btn, getter = getter, setter = setter})
@@ -2270,43 +2276,74 @@ local function buildGUI()
 			return CONFIG_DIR .. "/" .. sanitizeName(name) .. ".json"
 		end
 
-		local function encodeValue(v)
-			local tv = typeof(v)
+		local function encodeValue(v, seen)
+			local baseType = type(v)
+			if baseType == "nil" or baseType == "string" or baseType == "number" or baseType == "boolean" then
+				return v
+			end
+
+			-- Roblox datatypes / EnumItems. Everything is guarded so an executor
+			-- quirk cannot escape the serializer as "attempt to call a nil value".
+			local tv = nil
+			pcall(function() tv = typeof(v) end)
 			if tv == "EnumItem" then
-				-- Some executors expose EnumItem.EnumType without a .Name member.
-				-- Serialize from tostring() instead, which is much more compatible.
-				local full = tostring(v) -- e.g. "Enum.KeyCode.One"
+				local full = tostring(v)
 				local enumName, itemName = full:match("^Enum%.([%w_]+)%.(.+)$")
-				if not enumName or not itemName then
-					return tostring(v)
+				if enumName and itemName then
+					return {__turbo_type = "EnumItem", enum = enumName, item = itemName}
 				end
-				return {__turbo_type = "EnumItem", enum = enumName, name = itemName}
+				return {__turbo_type = "EnumItem", enum = "KeyCode", item = "Unknown"}
 			elseif tv == "Color3" then
 				return {__turbo_type = "Color3", r = v.R, g = v.G, b = v.B}
 			elseif tv == "Vector3" then
 				return {__turbo_type = "Vector3", x = v.X, y = v.Y, z = v.Z}
 			elseif tv == "CFrame" then
-				local x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22 = v:GetComponents()
-				return {__turbo_type = "CFrame", c = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}}
-			elseif type(v) == "table" then
+				local ok, result = pcall(function()
+					local x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22 = v:GetComponents()
+					return {__turbo_type = "CFrame", c = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}}
+				end)
+				if ok then return result end
+			end
+
+			if baseType == "table" then
+				seen = seen or {}
+				if seen[v] then return nil end
+				seen[v] = true
 				local out = {}
 				for k, value in pairs(v) do
 					if type(k) == "string" or type(k) == "number" then
-						out[k] = encodeValue(value)
+						local encoded = encodeValue(value, seen)
+						if encoded ~= nil then out[k] = encoded end
 					end
 				end
+				seen[v] = nil
 				return out
 			end
-			return v
+
+			-- Functions, Instances and other unsupported runtime values are not
+			-- configuration data, so simply omit them instead of breaking JSONEncode.
+			return nil
 		end
 
 		local function decodeValue(v)
+			if type(v) == "string" then
+				-- Compatibility with configs created by older versions.
+				local enumName, itemName = v:match("^Enum%.([%w_]+)%.(.+)$")
+				if enumName and itemName then
+					local ok, result = pcall(function()
+						local enum = Enum[enumName]
+						return enum and enum[itemName] or nil
+					end)
+					if ok and result ~= nil then return result end
+				end
+				return v
+			end
 			if type(v) ~= "table" then return v end
 			if v.__turbo_type == "EnumItem" then
+				local itemName = v.item or v.name
 				local ok, result = pcall(function()
 					local enum = Enum[v.enum]
-					if not enum then return nil end
-					return enum[v.name]
+					return enum and enum[itemName] or nil
 				end)
 				if ok and result ~= nil then return result end
 				return Enum.KeyCode.Unknown
@@ -2422,12 +2459,14 @@ local function buildGUI()
 			if type(writefile) ~= "function" then return false, "writefile indisponível" end
 			ensureConfigFolder()
 			local ok, err = pcall(function()
-				writefile(configPath(name), HttpService:JSONEncode({
-					version = 3,
+				local snap = snapshotConfig()
+				local payload = {
+					version = 4,
 					name = name,
-					config = snapshotConfig(),
+					config = snap,
 					accent = encodeValue(Theme.Accent),
-				}))
+				}
+				writefile(configPath(name), HttpService:JSONEncode(payload))
 			end)
 			if not ok then return false, tostring(err) end
 			local names = listConfigs()
@@ -2498,7 +2537,7 @@ local function buildGUI()
 		New("UIListLayout", {SortOrder = Enum.SortOrder.Name}, menuScroll)
 		table.insert(AllLists, menu)
 		local function rebuildSelector()
-			for _, child in ipairs(menuScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+			for _, child in ipairs(menuScroll:GetChildren()) do if child and child.ClassName == "TextButton" then pcall(function() child:Destroy() end) end end
 			configNames = listConfigs()
 			if #configNames == 0 then
 				local empty = New("TextLabel", {Size=UDim2.new(1,0,0,30), BackgroundTransparency=1, Text="  Nenhuma config salva", TextColor3=Theme.SubText, TextSize=12, Font=Enum.Font.Gotham, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=402}, menuScroll)
@@ -2530,15 +2569,20 @@ local function buildGUI()
 		end)
 
 		makeSmallButton(cSave, "Salvar Config", Theme.Accent, function()
-			local name = sanitizeName(nameBox.Text)
-			local ok, result = saveConfig(name)
-			if ok then
-				selectedConfig = result
-				nameBox.Text = result
-				configDropdown.Text = "  "..result
-				rebuildSelector()
-				setStatus(true, "salva: "..result)
-			else setStatus(false, result) end
+			local okAll, errAll = pcall(function()
+				local name = sanitizeName(nameBox.Text)
+				local ok, result = saveConfig(name)
+				if ok then
+					selectedConfig = result
+					nameBox.Text = result
+					configDropdown.Text = "  "..result
+					rebuildSelector()
+					setStatus(true, "salva: "..result)
+				else
+					setStatus(false, tostring(result))
+				end
+			end)
+			if not okAll then setStatus(false, "erro ao salvar: "..tostring(errAll)) end
 		end)
 		makeSmallButton(cSave, "Carregar Config", Color3.fromRGB(65, 145, 90), function()
 			local name = selectedConfig or sanitizeName(nameBox.Text)
@@ -2837,7 +2881,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if Binding then
 		if input.KeyCode == Enum.KeyCode.Escape then
 			Binding.TextColor3 = Theme.Text
-			for _, b in ipairs(AllBinds) do b.btn.Text = b.getter().Name end
+			for _, b in ipairs(AllBinds) do b.btn.Text = enumDisplay(b.getter()) end
 			Binding = nil
 			return
 		end
@@ -2845,7 +2889,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			for _, b in ipairs(AllBinds) do
 				if b.btn == Binding then b.setter(input.KeyCode); break end
 			end
-			Binding.Text = input.KeyCode.Name
+			Binding.Text = enumDisplay(input.KeyCode)
 			Binding.TextColor3 = Theme.Text
 			Binding = nil
 			clearFocus()
@@ -2868,4 +2912,4 @@ task.spawn(function()
 	end
 end)
 
-print("Turbo GUI v5.1 | Unique Icons | AimParts | Accent | Reduced Pixelation | Panic=" .. Config.PanicKey.Name)
+print("Turbo GUI v5.1 | Unique Icons | AimParts | Accent | Reduced Pixelation | Panic=" .. enumDisplay(Config.PanicKey))
