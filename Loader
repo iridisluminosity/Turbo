@@ -1,1 +1,1487 @@
+-- Turbo Premium Loader / Runtime UI Patch
+-- Execute this script instead of Main.
+-- It downloads Main directly into memory and executes it without creating Main.lua.
+-- Panic confirmation is controlled by the loader/Main bridge.
+-- Includes lightweight integrity and anti-tamper checks.
 
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+local ROOT = "Turbo"
+local RAW = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/"
+
+local DIRS = {
+    ROOT,
+    ROOT .. "/Sounds",
+    ROOT .. "/Images",
+    ROOT .. "/Images/Animations",
+    ROOT .. "/Configs",
+}
+
+for _, folder in ipairs(DIRS) do
+    pcall(function()
+        if not isfolder(folder) then
+            makefolder(folder)
+        end
+    end)
+end
+
+local function httpGet(url)
+    local ok, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+    return ok and result or nil
+end
+
+local function isFile(path)
+    local ok, result = pcall(function()
+        return isfile(path)
+    end)
+    return ok and result
+end
+
+local function writeSafe(path, data)
+    pcall(function()
+        writefile(path, data)
+    end)
+end
+
+local function readSafe(path)
+    local ok, result = pcall(function()
+        return readfile(path)
+    end)
+    return ok and result or nil
+end
+
+local function customAsset(path)
+    if getcustomasset then
+        local ok, result = pcall(function()
+            return getcustomasset(path)
+        end)
+        if ok then return result end
+    end
+
+    if getsynasset then
+        local ok, result = pcall(function()
+            return getsynasset(path)
+        end)
+        if ok then return result end
+    end
+end
+
+local function cache(url, path)
+    if not isFile(path) then
+        local data = httpGet(url)
+        if not data then return nil end
+        writeSafe(path, data)
+    end
+
+    return customAsset(path)
+end
+
+local Sounds = {}
+
+local function makeSound(name, fileName, volume)
+    local path = ROOT .. "/Sounds/" .. fileName
+    local asset = cache(RAW .. "Sounds/" .. fileName, path)
+
+    if not asset then
+        return nil
+    end
+
+    local sound = Instance.new("Sound")
+    sound.Name = "TurboPremium_" .. name
+    sound.SoundId = asset
+    sound.Volume = volume or 0.35
+    sound.Parent = SoundService
+
+    return sound
+end
+
+local function getSound(name, preferred, fallback)
+    if Sounds[name] then
+        return Sounds[name]
+    end
+
+    local sound = makeSound(name, preferred, 0.32)
+
+    if not sound and fallback then
+        sound = makeSound(name, fallback, 0.25)
+    end
+
+    Sounds[name] = sound
+    return sound
+end
+
+local function playSound(name, preferred, fallback, volume)
+    local sound = getSound(name, preferred, fallback)
+
+    if not sound then
+        return
+    end
+
+    sound.Volume = volume or sound.Volume
+    sound.TimePosition = 0
+
+    pcall(function()
+        sound:Play()
+    end)
+end
+
+-- =========================================================
+-- PREMIUM LOADING SCREEN
+-- =========================================================
+
+local oldLoader = PlayerGui:FindFirstChild("TurboPremiumLoader")
+
+if oldLoader then
+    oldLoader:Destroy()
+end
+
+local Screen = Instance.new("ScreenGui")
+Screen.Name = "TurboPremiumLoader"
+Screen.IgnoreGuiInset = true
+Screen.ResetOnSpawn = false
+Screen.DisplayOrder = 2147483646
+Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Screen.Parent = PlayerGui
+
+local BG = Instance.new("Frame")
+BG.Size = UDim2.fromScale(1, 1)
+BG.BackgroundColor3 = Color3.fromRGB(7, 8, 11)
+BG.BorderSizePixel = 0
+BG.Parent = Screen
+
+local bgGradient = Instance.new("UIGradient")
+bgGradient.Rotation = 90
+bgGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(5, 6, 8)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(12, 13, 18)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 6, 8)),
+})
+bgGradient.Parent = BG
+
+local accent = Color3.fromRGB(225, 55, 72)
+
+local center = Instance.new("Frame")
+center.AnchorPoint = Vector2.new(0.5, 0.5)
+center.Position = UDim2.fromScale(0.5, 0.47)
+center.Size = UDim2.fromOffset(450, 380)
+center.BackgroundTransparency = 1
+center.Parent = BG
+
+local glow = Instance.new("ImageLabel")
+glow.AnchorPoint = Vector2.new(0.5, 0.5)
+glow.Position = UDim2.fromScale(0.5, 0.36)
+glow.Size = UDim2.fromOffset(270, 270)
+glow.BackgroundTransparency = 1
+glow.Image = "rbxassetid://5028857084"
+glow.ImageColor3 = accent
+glow.ImageTransparency = 0.9
+glow.Parent = center
+
+task.spawn(function()
+    while Screen.Parent do
+        TweenService:Create(glow, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            Size = UDim2.fromOffset(320, 320),
+            ImageTransparency = 0.95
+        }):Play()
+
+        task.wait(1.5)
+
+        TweenService:Create(glow, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            Size = UDim2.fromOffset(270, 270),
+            ImageTransparency = 0.9
+        }):Play()
+
+        task.wait(1.5)
+    end
+end)
+
+local animation = Instance.new("ImageLabel")
+animation.AnchorPoint = Vector2.new(0.5, 0.5)
+animation.Position = UDim2.fromScale(0.5, 0.36)
+animation.Size = UDim2.fromOffset(150, 150)
+animation.BackgroundTransparency = 1
+animation.ImageTransparency = 1
+animation.Parent = center
+
+local frames = {
+    "BoostLoading.png",
+    "BoostLoading1.png",
+    "BoostLoading2.png",
+    "BoostLoading3.png",
+    "BoostLoading4.png",
+    "BoostLoading5.png",
+}
+
+local cachedFrames = {}
+
+for _, name in ipairs(frames) do
+    local path = ROOT .. "/Images/Animations/" .. name
+
+    local asset = cache(
+        RAW .. "Images/Animations/LoadingAnimation/" .. name,
+        path
+    )
+
+    if asset then
+        table.insert(cachedFrames, asset)
+    end
+end
+
+if cachedFrames[1] then
+    animation.Image = cachedFrames[1]
+end
+
+TweenService:Create(
+    animation,
+    TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    {ImageTransparency = 0}
+):Play()
+
+task.spawn(function()
+    local index = 1
+
+    while Screen.Parent and #cachedFrames > 0 do
+        animation.Image = cachedFrames[index]
+
+        index = index + 1
+
+        if index > #cachedFrames then
+            index = 1
+        end
+
+        task.wait(0.11)
+    end
+end)
+
+local title = Instance.new("TextLabel")
+title.AnchorPoint = Vector2.new(0.5, 0)
+title.Position = UDim2.fromScale(0.5, 0.50)
+title.Size = UDim2.fromOffset(430, 50)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBlack
+title.Text = "TURBO"
+title.TextColor3 = Color3.fromRGB(245, 245, 248)
+title.TextSize = 36
+title.TextTransparency = 1
+title.Parent = center
+
+local line = Instance.new("Frame")
+line.AnchorPoint = Vector2.new(0.5, 0)
+line.Position = UDim2.fromScale(0.5, 0.65)
+line.Size = UDim2.fromOffset(0, 2)
+line.BackgroundColor3 = accent
+line.BorderSizePixel = 0
+line.Parent = center
+
+local subtitle = Instance.new("TextLabel")
+subtitle.AnchorPoint = Vector2.new(0.5, 0)
+subtitle.Position = UDim2.fromScale(0.5, 0.68)
+subtitle.Size = UDim2.fromOffset(430, 24)
+subtitle.BackgroundTransparency = 1
+subtitle.Font = Enum.Font.GothamMedium
+subtitle.Text = "PREMIUM CONTROL SYSTEM"
+subtitle.TextColor3 = Color3.fromRGB(145, 148, 158)
+subtitle.TextSize = 11
+subtitle.TextTransparency = 1
+subtitle.Parent = center
+
+local status = Instance.new("TextLabel")
+status.AnchorPoint = Vector2.new(0.5, 0)
+status.Position = UDim2.fromScale(0.5, 0.76)
+status.Size = UDim2.fromOffset(430, 24)
+status.BackgroundTransparency = 1
+status.Font = Enum.Font.GothamBold
+status.Text = "CONNECTING"
+status.TextColor3 = accent
+status.TextSize = 11
+status.TextTransparency = 1
+status.Parent = center
+
+local percent = Instance.new("TextLabel")
+percent.AnchorPoint = Vector2.new(0.5, 0)
+percent.Position = UDim2.fromScale(0.5, 0.82)
+percent.Size = UDim2.fromOffset(430, 20)
+percent.BackgroundTransparency = 1
+percent.Font = Enum.Font.GothamMedium
+percent.Text = "0%"
+percent.TextColor3 = Color3.fromRGB(145, 148, 158)
+percent.TextSize = 10
+percent.TextTransparency = 1
+percent.Parent = center
+
+local progressBG = Instance.new("Frame")
+progressBG.AnchorPoint = Vector2.new(0.5, 0)
+progressBG.Position = UDim2.fromScale(0.5, 0.89)
+progressBG.Size = UDim2.fromOffset(340, 4)
+progressBG.BackgroundColor3 = Color3.fromRGB(28, 29, 35)
+progressBG.BorderSizePixel = 0
+progressBG.Parent = center
+
+local pc = Instance.new("UICorner")
+pc.CornerRadius = UDim.new(1, 0)
+pc.Parent = progressBG
+
+local progress = Instance.new("Frame")
+progress.Size = UDim2.fromScale(0, 1)
+progress.BackgroundColor3 = accent
+progress.BorderSizePixel = 0
+progress.Parent = progressBG
+
+local pc2 = Instance.new("UICorner")
+pc2.CornerRadius = UDim.new(1, 0)
+pc2.Parent = progress
+
+for _, obj in ipairs({title, subtitle, status, percent}) do
+    TweenService:Create(
+        obj,
+        TweenInfo.new(0.65, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {TextTransparency = 0}
+    ):Play()
+end
+
+TweenService:Create(
+    line,
+    TweenInfo.new(0.75, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    {Size = UDim2.fromOffset(70, 2)}
+):Play()
+
+local function setProgress(value, text)
+    value = math.clamp(value, 0, 1)
+
+    percent.Text = tostring(math.floor(value * 100)) .. "%"
+    status.Text = text
+
+    TweenService:Create(
+        progress,
+        TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {Size = UDim2.fromScale(value, 1)}
+    ):Play()
+end
+
+setProgress(0.12, "CONNECTING")
+task.wait(0.08)
+
+setProgress(0.25, "PREPARING AUDIO")
+
+for _, pair in ipairs({
+    {"open", "gui_open.ogg", nil},
+    {"close", "gui_close.ogg", nil},
+    {"hover", "hover.ogg", nil},
+    {"click", "click.ogg", nil},
+    {"select", "select.ogg", nil},
+    {"lock", "lock.ogg", "select.ogg"},
+}) do
+    getSound(pair[1], pair[2], pair[3])
+end
+
+setProgress(0.46, "LOADING ANIMATION")
+task.wait(0.08)
+
+setProgress(0.60, "WARMING CACHE")
+
+-- =========================================================
+-- PROTECTED MAIN: MEMORY-ONLY
+-- Main.lua is NEVER written to disk and there is no local fallback.
+-- =========================================================
+_G.TurboPremiumPanicHandled = true
+_G.TurboPremiumDoPanic = nil
+
+local function fnv1a(data)
+    local h = 2166136261
+    local bxor = bit32 and bit32.bxor
+    if type(bxor) ~= "function" then return nil end
+    for i = 1, #data do
+        h = bxor(h, string.byte(data, i))
+        h = (h * 16777619) % 4294967296
+    end
+    return string.format("%08x", h)
+end
+
+local function saneMain(data)
+    return type(data) == "string"
+        and #data >= 1000
+        and #data <= 4000000
+        and not data:find("\0", 1, true)
+end
+
+local function readIntegrityManifest()
+    local manifest = httpGet(RAW .. "Configs/integrity.txt")
+    if not manifest then return nil end
+    local expected = manifest:match("MAIN%s*=%s*([%x]+)")
+    return expected and string.lower(expected) or nil
+end
+
+local mainCode = httpGet(RAW .. "Main")
+local mainIntegrityExpected = readIntegrityManifest()
+local mainIntegrityActual = mainCode and fnv1a(mainCode) or nil
+
+if not saneMain(mainCode) then
+    mainCode = nil
+    warn("[Turbo] Main rejected by integrity sanity check.")
+elseif mainIntegrityExpected and mainIntegrityActual ~= mainIntegrityExpected then
+    warn("[Turbo] Main integrity mismatch; execution aborted.")
+    mainCode = nil
+end
+
+-- Keep the source only in memory. Do not write Main to Turbo/Main.lua.
+-- Asset caching below is intentionally limited to sounds/images.
+
+
+setProgress(0.72, "BUILDING UI")
+task.wait(0.08)
+
+-- =========================================================
+-- MAIN EXECUTION
+-- IMPORTANT: Main is executed completely unmodified.
+-- The premium layer is attached only after Main creates Turbo.
+-- =========================================================
+
+-- =========================================================
+-- EXECUTE CURRENT MAIN
+-- =========================================================
+
+setProgress(0.90, "SYNCING CONTROLS")
+task.wait(0.08)
+
+setProgress(1, "READY")
+task.wait(0.20)
+
+local mainRunOK = false
+local mainRunError = nil
+local mainCompileError = nil
+
+if mainCode then
+    -- Basic runtime anti-tamper: fail closed if the execution primitives were replaced.
+    local primitivesOK = type(loadstring) == "function"
+        and type(pcall) == "function"
+        and type(rawget) == "function"
+        and type(task) == "table"
+        and type(task.wait) == "function"
+
+    if not primitivesOK then
+        mainRunError = "Runtime integrity check failed."
+        warn("[Turbo] Runtime integrity check failed.")
+        mainCode = nil
+    end
+end
+
+if mainCode then
+    local fn, compileError = loadstring(mainCode)
+
+    if not fn then
+        mainCompileError = compileError
+        warn("[Turbo] Main compile error:", compileError)
+    else
+        -- Reserve END for the loader confirmation dialog while Main runs.
+        -- This avoids modifying/patching the obfuscated Main source.
+        local function makeInputProxy()
+            local realUIS = game:GetService("UserInputService")
+            local proxy = {}
+            setmetatable(proxy, {
+                __index = function(_, key)
+                    if key == "InputBegan" then
+                        local signal = realUIS.InputBegan
+                        return {
+                            Connect = function(_, callback)
+                                return signal:Connect(function(input, processed)
+                                    if input.KeyCode == Enum.KeyCode.End then return end
+                                    return callback(input, processed)
+                                end)
+                            end,
+                        }
+                    end
+                    return realUIS[key]
+                end,
+            })
+            return proxy
+        end
+
+        local mainGame = game
+        local mainEnv
+        local mainSetFenv = setfenv
+        if type(mainSetFenv) == "function" then
+            local realUIS = game:GetService("UserInputService")
+            local inputProxy = makeInputProxy()
+            local gameProxy = setmetatable({}, {
+                __index = function(_, key)
+                    if key == "GetService" then
+                        return function(_, serviceName)
+                            if serviceName == "UserInputService" then
+                                return inputProxy
+                            end
+                            return mainGame:GetService(serviceName)
+                        end
+                    end
+                    local value = mainGame[key]
+                    if type(value) == "function" then
+                        return function(_, ...)
+                            return value(mainGame, ...)
+                        end
+                    end
+                    return value
+                end,
+            })
+            mainEnv = getfenv and getfenv(fn) or {}
+            mainEnv.game = gameProxy
+            pcall(mainSetFenv, fn, mainEnv)
+        end
+
+        -- IMPORTANT: run Main synchronously. The previous versions started
+        -- Main in task.spawn and then tried to find its GUI from a second
+        -- thread. If Main failed or was still initializing, the premium
+        -- layer could finish with only the loader visible.
+        local ok, err = pcall(fn)
+        mainRunOK = ok
+        mainRunError = err
+
+        if not ok then
+            warn("[Turbo] Main runtime error:", err)
+        end
+    end
+else
+    warn("[Turbo] Could not load Main.")
+end
+
+-- =========================================================
+-- WAIT FOR TURBO GUI
+-- =========================================================
+
+local TurboGui
+
+for _ = 1, 60 do
+    TurboGui = PlayerGui:FindFirstChild("Turbo")
+    if TurboGui then break end
+    task.wait(0.05)
+end
+
+if not TurboGui then
+    warn("[Turbo] Main finished but ScreenGui 'Turbo' was not created.")
+    if mainCompileError then
+        warn("[Turbo] Compile error:", mainCompileError)
+    elseif mainRunError then
+        warn("[Turbo] Runtime error:", mainRunError)
+    end
+end
+
+-- The runtime below needs the actual GUI and Main locals from Main.
+local turboGui = TurboGui
+
+if turboGui then
+    -- Main owns the lock UI, but it may leave the root ScreenGui/frame hidden
+    -- while it initializes. The premium loader must never finish with an
+    -- invisible menu.
+    pcall(function()
+        turboGui.Enabled = true
+    end)
+end
+
+if turboGui then
+
+-- =========================================================
+-- TURBO PREMIUM INTERACTION RUNTIME
+-- Runs AFTER Main so no local-function/nil-scope patching is needed.
+-- Restores premium hover/click/tab/toggle/menu interactions safely.
+-- =========================================================
+
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+
+if turboGui then
+    pcall(function()
+        turboGui.DisplayOrder = 2147483645
+        turboGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    end)
+end
+
+local TurboUI = {}
+
+local function turboAsset(fileName)
+    local path = ROOT .. "/Sounds/" .. fileName
+    return cache(RAW .. "Sounds/" .. fileName, path)
+end
+
+local function turboRuntimeSound(name, fileName, fallback, volume)
+    if TurboUI[name] then
+        return TurboUI[name]
+    end
+
+    local asset = turboAsset(fileName)
+    if not asset and fallback then
+        asset = turboAsset(fallback)
+    end
+    if not asset then return nil end
+
+    local s = Instance.new("Sound")
+    s.Name = "TurboUI_" .. name
+    s.SoundId = asset
+    s.Volume = volume or 0.25
+    s.Parent = SoundService
+    TurboUI[name] = s
+    return s
+end
+
+local function turboPlay(name, fileName, fallback, volume)
+    local s = turboRuntimeSound(name, fileName, fallback, volume)
+    if not s then return end
+
+    pcall(function()
+        s.Volume = volume or s.Volume
+        s.TimePosition = 0
+        s:Play()
+    end)
+end
+
+-- =========================================================
+-- FIND THE MAIN CONTENT FRAME
+-- =========================================================
+
+local function findMainFrame(gui)
+    if not gui then return nil end
+
+    local best, bestArea = nil, -1
+
+    for _, child in ipairs(gui:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("ScrollingFrame") then
+            local size = child.AbsoluteSize
+            local area = size.X * size.Y
+
+            if area > bestArea then
+                best = child
+                bestArea = area
+            end
+        end
+    end
+
+    return best
+end
+
+local mainFrame = findMainFrame(turboGui)
+
+-- Make only the root content container visible. Do NOT touch child tab
+-- visibility, otherwise Character/AimParts/Settings would all overlap.
+if mainFrame then
+    pcall(function()
+        mainFrame.Visible = true
+    end)
+end
+
+-- A few executors/games create the root frame a little after ScreenGui.
+-- Re-check briefly without changing any tab states.
+task.spawn(function()
+    for _ = 1, 25 do
+        if not turboGui or not turboGui.Parent then return end
+
+        pcall(function()
+            turboGui.Enabled = true
+        end)
+
+        if not mainFrame or not mainFrame.Parent then
+            mainFrame = findMainFrame(turboGui)
+        end
+
+        if mainFrame then
+            pcall(function()
+                mainFrame.Visible = true
+            end)
+            return
+        end
+
+        task.wait(0.08)
+    end
+end)
+
+-- =========================================================
+-- PREMIUM MENU OPEN / CLOSE
+-- =========================================================
+
+local menuScale
+local menuBusy = false
+local menuOpen = true
+
+local function setupMenuScale()
+    if not mainFrame or not mainFrame.Parent then
+        mainFrame = findMainFrame(turboGui)
+    end
+    if not mainFrame then return nil end
+
+    menuScale = mainFrame:FindFirstChild("TurboPremiumMenuScale")
+
+    if not menuScale then
+        menuScale = Instance.new("UIScale")
+        menuScale.Name = "TurboPremiumMenuScale"
+        menuScale.Scale = 1
+        menuScale.Parent = mainFrame
+    end
+
+    return menuScale
+end
+
+local function animateMenuOpen()
+    if not turboGui or not turboGui.Parent then return end
+    if menuBusy then return end
+
+    menuBusy = true
+    menuOpen = true
+    turboGui.Enabled = true
+
+    local frame = mainFrame or findMainFrame(turboGui)
+    local scale = setupMenuScale()
+
+    if frame and scale then
+        local original = frame.Position
+
+        scale.Scale = 0.965
+        frame.Position = original + UDim2.fromOffset(0, 12)
+
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Scale = 1}
+        ):Play()
+
+        TweenService:Create(
+            frame,
+            TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Position = original}
+        ):Play()
+    end
+
+    turboPlay("menuOpen", "gui_open.ogg", "click.ogg", 0.40)
+
+    task.delay(0.36, function()
+        menuBusy = false
+    end)
+end
+
+local function animateMenuClose()
+    if not turboGui or not turboGui.Parent then return end
+    if menuBusy then return end
+
+    menuBusy = true
+    menuOpen = false
+
+    local frame = mainFrame or findMainFrame(turboGui)
+    local scale = setupMenuScale()
+
+    turboPlay("menuClose", "gui_close.ogg", "click.ogg", 0.34)
+
+    if frame and scale then
+        local original = frame.Position
+
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {Scale = 0.965}
+        ):Play()
+
+        TweenService:Create(
+            frame,
+            TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {Position = original + UDim2.fromOffset(0, 10)}
+        ):Play()
+
+        task.delay(0.21, function()
+            if frame and frame.Parent then
+                frame.Position = original
+                scale.Scale = 1
+            end
+            if turboGui and turboGui.Parent and not menuOpen then
+                turboGui.Enabled = false
+            end
+            menuBusy = false
+        end)
+    else
+        turboGui.Enabled = false
+        menuBusy = false
+    end
+end
+
+local function toggleMenu()
+    if not turboGui or not turboGui.Parent then return end
+
+    local currentlyOpen = turboGui.Enabled == true
+        and mainFrame ~= nil
+        and mainFrame.Parent ~= nil
+        and mainFrame.Visible == true
+
+    if currentlyOpen then
+        animateMenuClose()
+    else
+        animateMenuOpen()
+    end
+end
+
+-- =========================================================
+-- PREMIUM HOVER + CLICK SYSTEM
+-- =========================================================
+
+local function setupButton(button)
+    if not button or not button:IsA("GuiButton") then
+        return
+    end
+
+    if button:GetAttribute("TurboPremiumHooked") then
+        return
+    end
+
+    button:SetAttribute("TurboPremiumHooked", true)
+    button.AutoButtonColor = false
+
+    local scale = button:FindFirstChild("TurboHoverScale")
+
+    if not scale then
+        scale = Instance.new("UIScale")
+        scale.Name = "TurboHoverScale"
+        scale.Scale = 1
+        scale.Parent = button
+    end
+
+    local stroke = button:FindFirstChild("TurboHoverStroke")
+
+    if not stroke then
+        stroke = Instance.new("UIStroke")
+        stroke.Name = "TurboHoverStroke"
+        stroke.Thickness = 1
+        stroke.Transparency = 1
+        stroke.Color = Color3.fromRGB(225, 55, 72)
+        stroke.Parent = button
+    end
+
+    local normalBackground = nil
+
+    if button:IsA("TextButton") or button:IsA("ImageButton") then
+        normalBackground = button.BackgroundColor3
+    end
+
+    button.MouseEnter:Connect(function()
+        if not button.Parent then return end
+
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Scale = 1.035}
+        ):Play()
+
+        TweenService:Create(
+            stroke,
+            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Transparency = 0.35}
+        ):Play()
+
+        turboPlay("hover", "hover.ogg", "click.ogg", 0.16)
+    end)
+
+    button.MouseLeave:Connect(function()
+        if not button.Parent then return end
+
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Scale = 1}
+        ):Play()
+
+        TweenService:Create(
+            stroke,
+            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Transparency = 1}
+        ):Play()
+    end)
+
+    button.Activated:Connect(function()
+        if not button.Parent then return end
+
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.065, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Scale = 0.96}
+        ):Play()
+
+        task.delay(0.065, function()
+            if scale and scale.Parent then
+                TweenService:Create(
+                    scale,
+                    TweenInfo.new(0.17, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                    {Scale = 1}
+                ):Play()
+            end
+        end)
+
+        turboPlay("click", "click.ogg", "select.ogg", 0.28)
+
+        -- Give tab content a moment to change Visible, then animate it.
+        task.defer(function()
+            task.wait()
+            if turboGui and turboGui.Parent then
+                -- Find sizeable visible content frames and give the newest tab panel
+                -- a small slide-in. Small controls are intentionally ignored.
+                for _, obj in ipairs(turboGui:GetDescendants()) do
+                    if (obj:IsA("Frame") or obj:IsA("ScrollingFrame"))
+                        and obj.Visible
+                        and obj.AbsoluteSize.X >= 220
+                        and obj.AbsoluteSize.Y >= 100
+                        and obj:GetAttribute("TurboTabPanel") then
+
+                        animateTabPanel(obj)
+                    end
+                end
+            end
+        end)
+    end)
+end
+
+-- =========================================================
+-- TAB PANELS
+-- =========================================================
+
+local function markTabPanels(gui)
+    if not gui then return end
+
+    for _, obj in ipairs(gui:GetDescendants()) do
+        if (obj:IsA("Frame") or obj:IsA("ScrollingFrame"))
+            and obj.AbsoluteSize.X >= 220
+            and obj.AbsoluteSize.Y >= 100 then
+
+            local name = string.lower(obj.Name)
+
+            if name:find("character", 1, true)
+                or name:find("aim", 1, true)
+                or name:find("whitelist", 1, true)
+                or name:find("settings", 1, true)
+                or name:find("config", 1, true)
+                or name:find("appearance", 1, true)
+                or name:find("tab", 1, true)
+                or name:find("content", 1, true)
+                or name:find("page", 1, true) then
+
+                obj:SetAttribute("TurboTabPanel", true)
+            end
+        end
+    end
+end
+
+-- Animate panels whenever Main changes their visibility.
+local tabBasePositions = setmetatable({}, {__mode = "k"})
+
+local function getTabBasePosition(obj)
+    local base = tabBasePositions[obj]
+    if base == nil then
+        base = obj.Position
+        tabBasePositions[obj] = base
+    end
+    return base
+end
+
+local function animateTabPanel(obj)
+    if not obj or not obj.Parent or not obj.Visible then return end
+
+    local target = getTabBasePosition(obj)
+    local scale = obj:FindFirstChild("TurboTabScale")
+
+    if not scale then
+        scale = Instance.new("UIScale")
+        scale.Name = "TurboTabScale"
+        scale.Parent = obj
+    end
+
+    -- Always start from the SAME base position. Never add the 12px offset
+    -- to the panel's already-animated position. This prevents tab drift.
+    obj.Position = target + UDim2.fromOffset(12, 0)
+    scale.Scale = 0.985
+
+    TweenService:Create(
+        scale,
+        TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {Scale = 1}
+    ):Play()
+
+    TweenService:Create(
+        obj,
+        TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {Position = target}
+    ):Play()
+end
+
+local function hookTabPanel(obj)
+    if not (obj:IsA("Frame") or obj:IsA("ScrollingFrame")) then
+        return
+    end
+
+    if not obj:GetAttribute("TurboTabPanel") then
+        return
+    end
+
+    if obj:GetAttribute("TurboTabVisibilityHooked") then
+        return
+    end
+
+    obj:SetAttribute("TurboTabVisibilityHooked", true)
+    tabBasePositions[obj] = obj.Position
+
+    obj:GetPropertyChangedSignal("Visible"):Connect(function()
+        if obj.Visible and turboGui and turboGui.Parent then
+            animateTabPanel(obj)
+        end
+    end)
+end
+
+if turboGui then
+    markTabPanels(turboGui)
+
+    for _, obj in ipairs(turboGui:GetDescendants()) do
+        if obj:IsA("GuiButton") then
+            setupButton(obj)
+        end
+        hookTabPanel(obj)
+    end
+
+    turboGui.DescendantAdded:Connect(function(obj)
+        task.defer(function()
+            if not turboGui or not turboGui.Parent then return end
+
+            if obj:IsA("GuiButton") then
+                setupButton(obj)
+            end
+
+            if obj:IsA("Frame") or obj:IsA("ScrollingFrame") then
+                local size = obj.AbsoluteSize
+                if size.X >= 220 and size.Y >= 100 then
+                    local name = string.lower(obj.Name)
+                    if name:find("character", 1, true)
+                        or name:find("aim", 1, true)
+                        or name:find("whitelist", 1, true)
+                        or name:find("settings", 1, true)
+                        or name:find("config", 1, true)
+                        or name:find("appearance", 1, true)
+                        or name:find("tab", 1, true)
+                        or name:find("content", 1, true)
+                        or name:find("page", 1, true) then
+                        obj:SetAttribute("TurboTabPanel", true)
+                    end
+                end
+                hookTabPanel(obj)
+            end
+        end)
+    end)
+end
+
+-- =========================================================
+-- TOGGLE / SWITCH FEEDBACK
+-- =========================================================
+
+local function hookSwitchVisuals(obj)
+    if not obj or not obj:IsA("GuiButton") then return end
+    if obj:GetAttribute("TurboSwitchHooked") then return end
+
+    local name = string.lower(obj.Name .. " " .. (obj:IsA("TextButton") and obj.Text or ""))
+
+    if not (
+        name:find("enable", 1, true)
+        or name:find("disable", 1, true)
+        or name:find("toggle", 1, true)
+        or name:find("switch", 1, true)
+        or name:find("lock", 1, true)
+    ) then
+        return
+    end
+
+    obj:SetAttribute("TurboSwitchHooked", true)
+
+    obj.Activated:Connect(function()
+        turboPlay("switch", "select.ogg", "click.ogg", 0.30)
+
+        local scale = obj:FindFirstChild("TurboSwitchScale")
+        if not scale then
+            scale = Instance.new("UIScale")
+            scale.Name = "TurboSwitchScale"
+            scale.Parent = obj
+        end
+
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.07, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Scale = 0.95}
+        ):Play()
+
+        task.delay(0.07, function()
+            if scale and scale.Parent then
+                TweenService:Create(
+                    scale,
+                    TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                    {Scale = 1}
+                ):Play()
+            end
+        end)
+    end)
+end
+
+if turboGui then
+    for _, obj in ipairs(turboGui:GetDescendants()) do
+        hookSwitchVisuals(obj)
+    end
+
+    turboGui.DescendantAdded:Connect(function(obj)
+        task.defer(function()
+            hookSwitchVisuals(obj)
+        end)
+    end)
+end
+
+-- =========================================================
+-- PANIC CONFIRMATION
+-- =========================================================
+
+local panicGui
+local panicBusy = false
+
+local function buildPanic()
+    if panicGui and panicGui.Parent then
+        return panicGui
+    end
+
+    panicGui = Instance.new("ScreenGui")
+    panicGui.Name = "TurboPanicConfirm"
+    panicGui.IgnoreGuiInset = true
+    panicGui.ResetOnSpawn = false
+    panicGui.DisplayOrder = 2147483647
+    panicGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    panicGui.Enabled = false
+    panicGui.Parent = PlayerGui
+
+    local dim = Instance.new("Frame")
+    dim.Size = UDim2.fromScale(1, 1)
+    dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dim.BackgroundTransparency = 0.34
+    dim.BorderSizePixel = 0
+    dim.ZIndex = 1
+    dim.Parent = panicGui
+
+    local card = Instance.new("Frame")
+    card.Name = "Card"
+    card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Position = UDim2.fromScale(0.5, 0.5)
+    card.Size = UDim2.fromOffset(480, 270)
+    card.BackgroundColor3 = Color3.fromRGB(15, 16, 21)
+    card.BorderSizePixel = 0
+    card.ZIndex = 10
+    card.Parent = panicGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = card
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(65, 66, 76)
+    stroke.Transparency = 0.35
+    stroke.Thickness = 1
+    stroke.Parent = card
+
+    local iconAsset = cache(
+        RAW .. "Images/warning.png",
+        ROOT .. "/Images/warning.png"
+    )
+
+    local icon = Instance.new("ImageLabel")
+    icon.AnchorPoint = Vector2.new(0.5, 0)
+    icon.Position = UDim2.fromScale(0.5, 0.08)
+    icon.Size = UDim2.fromOffset(46, 46)
+    icon.BackgroundTransparency = 1
+    icon.Image = iconAsset or ""
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.ZIndex = 11
+    icon.Parent = card
+
+    if not iconAsset then
+        icon.Visible = false
+    end
+
+    local title = Instance.new("TextLabel")
+    title.AnchorPoint = Vector2.new(0.5, 0)
+    title.Position = UDim2.fromScale(0.5, 0.30)
+    title.Size = UDim2.fromOffset(430, 32)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.Text = "PANIC SHUTDOWN"
+    title.TextColor3 = Color3.fromRGB(245, 245, 248)
+    title.TextSize = 18
+    title.ZIndex = 11
+    title.Parent = card
+
+    local message = Instance.new("TextLabel")
+    message.AnchorPoint = Vector2.new(0.5, 0)
+    message.Position = UDim2.fromScale(0.5, 0.47)
+    message.Size = UDim2.fromOffset(410, 48)
+    message.BackgroundTransparency = 1
+    message.Font = Enum.Font.GothamMedium
+    message.Text = "Are you sure you want to completely close Turbo?"
+    message.TextColor3 = Color3.fromRGB(225, 226, 232)
+    message.TextSize = 13
+    message.TextWrapped = true
+    message.ZIndex = 11
+    message.Parent = card
+
+    local sub = Instance.new("TextLabel")
+    sub.AnchorPoint = Vector2.new(0.5, 0)
+    sub.Position = UDim2.fromScale(0.5, 0.64)
+    sub.Size = UDim2.fromOffset(410, 25)
+    sub.BackgroundTransparency = 1
+    sub.Font = Enum.Font.Gotham
+    sub.Text = "This will disable Turbo and remove all active systems."
+    sub.TextColor3 = Color3.fromRGB(135, 138, 149)
+    sub.TextSize = 10
+    sub.ZIndex = 11
+    sub.Parent = card
+
+    local cancel = Instance.new("TextButton")
+    cancel.AnchorPoint = Vector2.new(0, 1)
+    cancel.Position = UDim2.new(0, 28, 1, -24)
+    cancel.Size = UDim2.fromOffset(195, 38)
+    cancel.BackgroundColor3 = Color3.fromRGB(27, 28, 35)
+    cancel.BorderSizePixel = 0
+    cancel.AutoButtonColor = false
+    cancel.Font = Enum.Font.GothamBold
+    cancel.Text = "CANCEL"
+    cancel.TextColor3 = Color3.fromRGB(205, 207, 215)
+    cancel.TextSize = 11
+    cancel.ZIndex = 12
+    cancel.Parent = card
+
+    local cc = Instance.new("UICorner")
+    cc.CornerRadius = UDim.new(0, 7)
+    cc.Parent = cancel
+
+    local confirm = Instance.new("TextButton")
+    confirm.AnchorPoint = Vector2.new(1, 1)
+    confirm.Position = UDim2.new(1, -28, 1, -24)
+    confirm.Size = UDim2.fromOffset(195, 38)
+    confirm.BackgroundColor3 = Color3.fromRGB(218, 54, 70)
+    confirm.BorderSizePixel = 0
+    confirm.AutoButtonColor = false
+    confirm.Font = Enum.Font.GothamBold
+    confirm.Text = "CONFIRM"
+    confirm.TextColor3 = Color3.fromRGB(255, 255, 255)
+    confirm.TextSize = 11
+    confirm.ZIndex = 12
+    confirm.Parent = card
+
+    local cfc = Instance.new("UICorner")
+    cfc.CornerRadius = UDim.new(0, 7)
+    cfc.Parent = confirm
+
+    local function panicButtonFX(button, normal, over)
+        local s = Instance.new("UIScale")
+        s.Scale = 1
+        s.Parent = button
+
+        button.MouseEnter:Connect(function()
+            TweenService:Create(
+                s,
+                TweenInfo.new(0.13, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+                {Scale = 1.025}
+            ):Play()
+            button.BackgroundColor3 = over
+            turboPlay("panicHover", "hover.ogg", "click.ogg", 0.15)
+        end)
+
+        button.MouseLeave:Connect(function()
+            TweenService:Create(
+                s,
+                TweenInfo.new(0.13, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+                {Scale = 1}
+            ):Play()
+            button.BackgroundColor3 = normal
+        end)
+    end
+
+    panicButtonFX(cancel, Color3.fromRGB(27, 28, 35), Color3.fromRGB(38, 39, 48))
+    panicButtonFX(confirm, Color3.fromRGB(218, 54, 70), Color3.fromRGB(236, 66, 83))
+
+    cancel.Activated:Connect(function()
+        turboPlay("panicCancel", "click.ogg", "select.ogg", 0.25)
+        panicGui.Enabled = false
+    end)
+
+    confirm.Activated:Connect(function()
+        if panicBusy then return end
+        panicBusy = true
+
+        turboPlay("panicConfirm", "click.ogg", "select.ogg", 0.30)
+
+        task.wait(0.10)
+
+        -- Only CONFIRM is allowed to execute Main's real panic cleanup.
+        local realPanic = rawget(_G, "TurboPremiumDoPanic")
+        if type(realPanic) == "function" then
+            pcall(realPanic)
+        else
+            warn("[Turbo] Real panic cleanup was not exported by Main.")
+            if turboGui and turboGui.Parent then
+                turboGui.Enabled = false
+                turboGui:Destroy()
+            end
+        end
+
+        if panicGui and panicGui.Parent then
+            panicGui.Enabled = false
+        end
+
+        _G.TurboPremiumPanicHandled = nil
+        _G.TurboPremiumDoPanic = nil
+        print("[Turbo] PANIC — confirmed.")
+    end)
+
+    return panicGui
+end
+
+local function showPanic()
+    local gui = buildPanic()
+    if not gui or panicBusy then return end
+
+    gui.Enabled = true
+
+    local card = gui:FindFirstChild("Card")
+    if card then
+        local scale = card:FindFirstChild("TurboPanicScale")
+        if not scale then
+            scale = Instance.new("UIScale")
+            scale.Name = "TurboPanicScale"
+            scale.Parent = card
+        end
+
+        scale.Scale = 0.92
+
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.27, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            {Scale = 1}
+        ):Play()
+    end
+
+    turboPlay("panicOpen", "gui_open.ogg", "click.ogg", 0.30)
+end
+
+-- =========================================================
+-- INPUTS: INSERT + END
+-- =========================================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+
+    if input.KeyCode == Enum.KeyCode.Insert then
+        toggleMenu()
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.End then
+        if turboGui and turboGui.Parent then
+            showPanic()
+        end
+        return
+    end
+end)
+
+-- =========================================================
+-- LOCK ACQUISITION SOUND
+-- =========================================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if not turboGui or not turboGui.Parent then return end
+
+    if input.KeyCode == Enum.KeyCode.LeftAlt then
+        turboPlay("lock", "lock.ogg", "select.ogg", 0.30)
+    elseif input.KeyCode == Enum.KeyCode.RightAlt then
+        turboPlay("lock", "lock.ogg", "select.ogg", 0.30)
+    end
+end)
+
+-- Preload interaction sounds so first hover/click is instant.
+task.spawn(function()
+    turboRuntimeSound("hover", "hover.ogg", "click.ogg", 0.16)
+    turboRuntimeSound("click", "click.ogg", "select.ogg", 0.28)
+    turboRuntimeSound("select", "select.ogg", "click.ogg", 0.28)
+    turboRuntimeSound("menuOpen", "gui_open.ogg", "click.ogg", 0.40)
+    turboRuntimeSound("menuClose", "gui_close.ogg", "click.ogg", 0.34)
+    turboRuntimeSound("lock", "lock.ogg", "select.ogg", 0.30)
+end)
+
+print("[Turbo] Premium Hover + Click: ON")
+print("[Turbo] Button Click FX: ON")
+print("[Turbo] Tab Transition FX: ON")
+print("[Turbo] Toggle/Switch FX: ON")
+print("[Turbo] Insert Menu Animation: ON")
+print("[Turbo] Panic Confirmation: ON")
+print("[Turbo] Alt/RightAlt Lock Sound: ON")
+
+end
+
+-- =========================================================
+-- LOADING SCREEN EXIT
+-- =========================================================
+
+task.wait(0.35)
+
+if not turboGui then
+    -- Keep the loader visible so the user can see that Main failed instead
+    -- of leaving an apparently blank game.
+    local status = Screen:FindFirstChild("Status", true)
+    if status and status:IsA("TextLabel") then
+        status.Text = mainCompileError and "MAIN COMPILE ERROR"
+            or mainRunError and "MAIN RUNTIME ERROR"
+            or "TURBO GUI NOT CREATED"
+        status.TextColor3 = Color3.fromRGB(220, 70, 85)
+    end
+
+    warn("[Turbo] Loader kept open because Turbo GUI was not created.")
+    return
+end
+
+playSound(
+    "open",
+    "gui_open.ogg",
+    "click.ogg",
+    0.36
+)
+
+for _, obj in ipairs(Screen:GetDescendants()) do
+    if obj:IsA("TextLabel") then
+        TweenService:Create(
+            obj,
+            TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {TextTransparency = 1}
+        ):Play()
+    elseif obj:IsA("ImageLabel") then
+        TweenService:Create(
+            obj,
+            TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {ImageTransparency = 1}
+        ):Play()
+    elseif obj:IsA("Frame") then
+        TweenService:Create(
+            obj,
+            TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {BackgroundTransparency = 1}
+        ):Play()
+    end
+end
+
+task.wait(0.5)
+
+if Screen then
+    Screen:Destroy()
+end
+
+print("[Turbo] Premium Loader initialized | V8 Protected")
+print("[Turbo] Premium Hover + Click + Tabs: ON")
+print("[Turbo] Insert Animation + Sounds: ON")
+print("[Turbo] Panic Confirmation: ON")
+print("[Turbo] Alt/RightAlt Lock Sound: ON")
+print("[Turbo] DisplayOrder: MAX")
