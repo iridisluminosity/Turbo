@@ -2273,7 +2273,14 @@ local function buildGUI()
 		local function encodeValue(v)
 			local tv = typeof(v)
 			if tv == "EnumItem" then
-				return {__turbo_type = "EnumItem", enum = v.EnumType.Name, name = v.Name}
+				-- Some executors expose EnumItem.EnumType without a .Name member.
+				-- Serialize from tostring() instead, which is much more compatible.
+				local full = tostring(v) -- e.g. "Enum.KeyCode.One"
+				local enumName, itemName = full:match("^Enum%.([%w_]+)%.(.+)$")
+				if not enumName or not itemName then
+					return tostring(v)
+				end
+				return {__turbo_type = "EnumItem", enum = enumName, name = itemName}
 			elseif tv == "Color3" then
 				return {__turbo_type = "Color3", r = v.R, g = v.G, b = v.B}
 			elseif tv == "Vector3" then
@@ -2298,9 +2305,11 @@ local function buildGUI()
 			if v.__turbo_type == "EnumItem" then
 				local ok, result = pcall(function()
 					local enum = Enum[v.enum]
-					return enum and enum[v.name]
+					if not enum then return nil end
+					return enum[v.name]
 				end)
-				return ok and result or nil
+				if ok and result ~= nil then return result end
+				return Enum.KeyCode.Unknown
 			elseif v.__turbo_type == "Color3" then
 				return Color3.new(tonumber(v.r) or 0, tonumber(v.g) or 0, tonumber(v.b) or 0)
 			elseif v.__turbo_type == "Vector3" then
