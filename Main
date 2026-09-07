@@ -603,11 +603,31 @@ local function isValidTarget(model)
 	if isAllyModel(model) then return false end
 	if hasBadName(model) then return false end
 	if not isRealCharacter(model) then return false end
+	if not model:IsDescendantOf(workspace) then return false end
 	local hrp = getRoot(model)
 	if not hrp then return false end
+	if not hrp:IsDescendantOf(model) then return false end
+	-- A real target must have a sane root in the loaded world. This rejects
+	-- stale/cloned rigs and bad physics states that can make the lock appear
+	-- to aim into the void.
 	local pos = hrp.Position
 	if pos ~= pos or pos.Magnitude > 100000 then return false end
-	if not hrp:IsDescendantOf(model) then return false end
+	local cf = hrp.CFrame
+	local lv = cf.LookVector
+	local rv = cf.RightVector
+	local uv = cf.UpVector
+	if lv.X ~= lv.X or rv.X ~= rv.X or uv.X ~= uv.X then return false end
+	if lv.Magnitude < 0.5 or rv.Magnitude < 0.5 or uv.Magnitude < 0.5 then return false end
+	-- Custom rigs are allowed, but a model with only a Humanoid/root is too
+	-- easy to confuse with temporary dummy/skill objects.
+	local bodyParts = 0
+	for _, child in ipairs(model:GetChildren()) do
+		if child:IsA("BasePart") then
+			bodyParts += 1
+			if bodyParts >= 2 then break end
+		end
+	end
+	if bodyParts < 2 then return false end
 	if isTargetCountering(model) then return false end
 	return true
 end
@@ -763,8 +783,13 @@ local function scanForTargets(parent, myPos, best, bestScore, depth)
 	if not ok or not children then return best, bestScore end
 	for _, child in ipairs(children) do
 		if child:IsA("Model") and child ~= character then
-			best, bestScore = considerTarget(child, myPos, best, bestScore)
-			best, bestScore = scanForTargets(child, myPos, best, bestScore, depth + 1)
+			if isValidTarget(child) then
+				-- Once a real character model is found, do not recurse into its
+				-- weapons/effects/nested models. This is a major anti-phantom guard.
+				best, bestScore = considerTarget(child, myPos, best, bestScore)
+			else
+				best, bestScore = scanForTargets(child, myPos, best, bestScore, depth + 1)
+			end
 		elseif child:IsA("Folder") or child:IsA("Configuration") or child:IsA("WorldModel") then
 			if not IGNORE_FOLDERS[child.Name] then
 				best, bestScore = scanForTargets(child, myPos, best, bestScore, depth + 1)
@@ -803,6 +828,9 @@ local function getClosestTarget()
 			best, bestScore = scanForTargets(folder, myPos, best, bestScore, 0)
 		end
 	end
+	-- Universal fallback: scan the whole Workspace, but only through the
+	-- validation/ignore gates above. This keeps custom games/Dummy layouts
+	-- supported without allowing VFX/temporary objects to become targets.
 	best, bestScore = scanForTargets(workspace, myPos, best, bestScore, 0)
 	return best
 end
@@ -857,8 +885,6 @@ local function getTargetUnderMouse(maxDistance, aimRadiusPx)
 			end
 		end
 	end
-	local chars = workspace:FindFirstChild("Characters")
-	if chars then scanMouse(chars, 0) end
 	scanMouse(workspace, 0)
 	return best
 end
@@ -1262,7 +1288,10 @@ local function doLock(dt)
 		end
 		return
 	end
-	if shouldRetarget() and not aerial and not stickyTarget and tick() - lastRetarget >= Config.UltraScanInterval then
+	-- Retarget is intentionally allowed during skills. Kokusen is skill 3
+	-- and must switch to whoever becomes the closest valid target mid-sequence.
+	if shouldRetarget() and not aerial and not stickyTarget
+		and tick() - lastRetarget >= Config.UltraScanInterval then
 		lastRetarget = tick()
 		local closest = getClosestTarget()
 		if closest and closest ~= lockedTarget then
@@ -1292,12 +1321,16 @@ local function doLock(dt)
 	if not lockedTarget or not isValidTarget(lockedTarget) then
 		if stickyTarget then return end
 		if aerial then lockedTarget = nil return end
+		-- If the current target disappears/becomes invalid, immediately acquire
+		-- the nearest VALID character. This is important for Kokusen retargeting.
 		local newTarget = getClosestTarget()
 		if newTarget then
 			lockedTarget = newTarget
 			smoothedAimPos, smoothedAimTarget = nil, nil
 			watchTargetForGrab(newTarget)
 		else
+			setRotateEnabled(false)
+			pcall(function() humanoid.AutoRotate = true end)
 			return
 		end
 	end
