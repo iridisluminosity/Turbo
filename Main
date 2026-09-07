@@ -1447,6 +1447,7 @@ local Theme = {
 
 local accentElements = {}
 local toggleUpdaters = {}
+local controlUpdaters = {}
 local knobStrokes = {}
 local lockKeyButtons = {}
 local AllLists = {}
@@ -1813,6 +1814,7 @@ local function buildGUI()
 		upd()
 		btn.Activated:Connect(function() setter(not getter()); upd() end)
 		table.insert(toggleUpdaters, upd)
+		table.insert(controlUpdaters, upd)
 	end
 
 	local function Slider(parent, text, min, max, dec, getter, setter)
@@ -1855,6 +1857,7 @@ local function buildGUI()
 			if fire then setter(v) end
 		end
 		setV(getter(), false)
+		table.insert(controlUpdaters, function() setV(getter(), false) end)
 		local drag = false
 		local function fromMouse()
 			local mx = UserInputService:GetMouseLocation().X
@@ -1921,6 +1924,11 @@ local function buildGUI()
 			o.MouseEnter:Connect(function() o.BackgroundTransparency = 0; o.BackgroundColor3 = Theme.Element end)
 			o.MouseLeave:Connect(function() o.BackgroundTransparency = 1 end)
 		end
+		local function updDropdown()
+			btn.Text = "  " .. tostring(getter())
+		end
+		updDropdown()
+		table.insert(controlUpdaters, updDropdown)
 		btn.Activated:Connect(function()
 			if list.Visible then closeLists()
 			else closeLists(); place(); list.Visible = true; OpenList = list end
@@ -1936,6 +1944,11 @@ local function buildGUI()
 			TextSize = 12, Font = Enum.Font.GothamMedium, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 31,
 		}, row)
 		Corner(btn, 6)
+		local function updBind()
+			btn.Text = getter().Name
+		end
+		updBind()
+		table.insert(controlUpdaters, updBind)
 		btn.Activated:Connect(function()
 			if Binding == btn then Binding = nil; btn.Text = getter().Name; btn.TextColor3 = Theme.Text
 			else Binding = btn; btn.Text = "..."; btn.TextColor3 = Theme.Accent end
@@ -2231,64 +2244,218 @@ local function buildGUI()
 
 	-- Config
 	do
-		local function ser()
-			local keys = {}
-			for _, k in ipairs(Config.LockKeys) do table.insert(keys, k.Name) end
-			return {
-				RotateMode = Config.RotateMode, TurnDeadzoneDegrees = Config.TurnDeadzoneDegrees,
-				ZeroDeadzoneWhenHolding = Config.ZeroDeadzoneWhenHolding, UsePrediction = Config.UsePrediction,
-				PredictionStrength = Config.PredictionStrength, PredictionMaxSpeed = Config.PredictionMaxSpeed,
-				PredictionHistorySmoothing = Config.PredictionHistorySmoothing,
-				AimPointBySource = Config.AimPointBySource, AimOffsetBySource = Config.AimOffsetBySource,
-				AboveHeadHeight = Config.AboveHeadHeight, AimSmooth = Config.AimSmooth,
-				UseSmoothTurn = Config.UseSmoothTurn, Smoothness = Config.Smoothness,
-				BehindHoldDelay = Config.BehindHoldDelay, BehindDistance = Config.BehindDistance,
-				BehindSmoothTime = Config.BehindSmoothTime, EnableTeleport = Config.EnableTeleport,
-				BlockRetargetClosest = Config.BlockRetargetClosest, SkillRetargetClosest = Config.SkillRetargetClosest,
-				MouseRetargetClosest = Config.MouseRetargetClosest, UltraScanInterval = Config.UltraScanInterval,
-				MinLockDistance = Config.MinLockDistance, MaxLockDistance = Config.MaxLockDistance,
-				StrongValidation = Config.StrongValidation, InstantBehindSnap = Config.InstantBehindSnap,
-				IgnoreActiveCounter = Config.IgnoreActiveCounter, TargetPriority = Config.TargetPriority,
-				ToggleKey = Config.ToggleKey.Name, EnableLockKey = Config.EnableLockKey.Name,
-				PanicKey = Config.PanicKey.Name, StickyLockKey = Config.StickyLockKey.Name,
-				BehindKey = Config.BehindKey.Name, PriorityKey = Config.PriorityKey.Name,
-				BlockKey = (Config.BlockKey or Enum.KeyCode.F).Name,
-				HoldThreshold = Config.HoldThreshold, ClickLockDuration = Config.ClickLockDuration,
-				MouseHoldThreshold = Config.MouseHoldThreshold, MouseClickLockDuration = Config.MouseClickLockDuration,
-				UseMouseButton1 = Config.UseMouseButton1, LockKeys = keys,
-				IgnoreAllies = Config.IgnoreAllies,
-				Accent = {math.floor(Theme.Accent.R*255+0.5), math.floor(Theme.Accent.G*255+0.5), math.floor(Theme.Accent.B*255+0.5)},
-			}
-		end
-		local function toKey(s)
-			local ok, k = pcall(function() return Enum.KeyCode[s] end)
-			return (ok and k) or Enum.KeyCode.Unknown
-		end
-		local function apply(data)
-			if type(data) ~= "table" then return false end
-			for k, v in pairs(data) do
-				if k == "LockKeys" and type(v) == "table" then
-					Config.LockKeys = {}
-					for _, n in ipairs(v) do local kk = toKey(n); if kk ~= Enum.KeyCode.Unknown then table.insert(Config.LockKeys, kk) end end
-				elseif k == "AimPointBySource" or k == "AimOffsetBySource" or k == "IgnoreAllies" then
-					if type(v) == "table" then Config[k] = v end
-				elseif type(Config[k]) == "EnumItem" or k:find("Key") then
-					Config[k] = toKey(v)
-				elseif Config[k] ~= nil then
-					Config[k] = v
-				end
+		local CONFIG_DIR = "Turbo/Configs"
+		local CONFIG_INDEX = CONFIG_DIR .. "/_index.json"
+		local selectedConfig = nil
+
+		local function ensureConfigFolder()
+			if type(isfolder) == "function" and type(makefolder) == "function" then
+				pcall(function()
+					if not isfolder("Turbo") then makefolder("Turbo") end
+					if not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
+				end)
 			end
-			if type(data.Accent) == "table" and #data.Accent >= 3 then
-				applyAccent(Color3.fromRGB(data.Accent[1], data.Accent[2], data.Accent[3]))
-			end
-			rebuildAllyCache()
-			return true
+		end
+		ensureConfigFolder()
+
+		local function sanitizeName(name)
+			name = tostring(name or ""):gsub("[%c<>:\"/\\|%?%*]", ""):gsub("^%s+", ""):gsub("%s+$", "")
+			name = name:gsub("%.+$", "")
+			if name == "" then name = "Config" end
+			if #name > 40 then name = name:sub(1, 40) end
+			return name
 		end
 
-		local cSave = Card(pCF.L, "Save / Load", "file")
-		local stLbl = Label(cSave, "Status: ready", 12, Theme.SubText)
-		stLbl.Size = UDim2.new(1, 0, 0, 20)
-		local function mkBtn(parent, text, col, fn)
+		local function configPath(name)
+			return CONFIG_DIR .. "/" .. sanitizeName(name) .. ".json"
+		end
+
+		local function encodeValue(v)
+			local tv = typeof(v)
+			if tv == "EnumItem" then
+				return {__turbo_type = "EnumItem", enum = v.EnumType.Name, name = v.Name}
+			elseif tv == "Color3" then
+				return {__turbo_type = "Color3", r = v.R, g = v.G, b = v.B}
+			elseif tv == "Vector3" then
+				return {__turbo_type = "Vector3", x = v.X, y = v.Y, z = v.Z}
+			elseif tv == "CFrame" then
+				local x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22 = v:GetComponents()
+				return {__turbo_type = "CFrame", c = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}}
+			elseif type(v) == "table" then
+				local out = {}
+				for k, value in pairs(v) do
+					if type(k) == "string" or type(k) == "number" then
+						out[k] = encodeValue(value)
+					end
+				end
+				return out
+			end
+			return v
+		end
+
+		local function decodeValue(v)
+			if type(v) ~= "table" then return v end
+			if v.__turbo_type == "EnumItem" then
+				local ok, result = pcall(function()
+					local enum = Enum[v.enum]
+					return enum and enum[v.name]
+				end)
+				return ok and result or nil
+			elseif v.__turbo_type == "Color3" then
+				return Color3.new(tonumber(v.r) or 0, tonumber(v.g) or 0, tonumber(v.b) or 0)
+			elseif v.__turbo_type == "Vector3" then
+				return Vector3.new(tonumber(v.x) or 0, tonumber(v.y) or 0, tonumber(v.z) or 0)
+			elseif v.__turbo_type == "CFrame" and type(v.c) == "table" and #v.c >= 12 then
+				local c = v.c
+				return CFrame.new(c[1],c[2],c[3],c[4],c[5],c[6],c[7],c[8],c[9],c[10],c[11],c[12])
+			end
+			local out = {}
+			for k, value in pairs(v) do
+				out[k] = decodeValue(value)
+			end
+			return out
+		end
+
+		local function snapshotConfig()
+			return encodeValue(Config)
+		end
+
+		local function mergeInto(dst, src)
+			if type(dst) ~= "table" or type(src) ~= "table" then return end
+			-- Replace known top-level values instead of recursively merging arrays.
+			-- This makes an empty saved whitelist/LockKeys correctly clear the current one.
+			for k, v in pairs(src) do
+				if dst[k] ~= nil then dst[k] = v end
+			end
+		end
+
+		local function readIndex()
+			if type(readfile) ~= "function" then return {} end
+			local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_INDEX)) end)
+			if ok and type(data) == "table" then return data end
+			return {}
+		end
+
+		local function writeIndex(names)
+			if type(writefile) ~= "function" then return end
+			pcall(function() writefile(CONFIG_INDEX, HttpService:JSONEncode(names)) end)
+		end
+
+		local function listConfigs()
+			ensureConfigFolder()
+			local found = {}
+			local seen = {}
+			if type(listfiles) == "function" then
+				local ok, files = pcall(listfiles, CONFIG_DIR)
+				if ok and type(files) == "table" then
+					for _, path in ipairs(files) do
+						local normalized = tostring(path):gsub("\\", "/")
+						local name = normalized:match("([^/]+)%.json$")
+						if name and name ~= "_index" then
+							local clean = sanitizeName(name)
+							if not seen[clean:lower()] then
+								seen[clean:lower()] = true
+								table.insert(found, clean)
+							end
+						end
+					end
+				end
+			end
+			for _, name in ipairs(readIndex()) do
+				local clean = sanitizeName(name)
+				if clean ~= "_index" and not seen[clean:lower()] then
+					local exists = true
+					if type(isfile) == "function" then
+						local okExists, resultExists = pcall(isfile, configPath(clean))
+						exists = okExists and resultExists == true
+					end
+					if exists then
+						seen[clean:lower()] = true
+						table.insert(found, clean)
+					end
+				end
+			end
+			table.sort(found, function(a,b) return a:lower() < b:lower() end)
+			return found
+		end
+
+		local cSave = Card(pCF.L, "Config Manager", "file")
+		local nameBox = New("TextBox", {
+			Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = Theme.Element,
+			BorderSizePixel = 0, Text = "MyConfig", PlaceholderText = "Nome da config...",
+			TextColor3 = Theme.Text, PlaceholderColor3 = Theme.SubText, TextSize = 12,
+			Font = Enum.Font.GothamMedium, ClearTextOnFocus = false,
+		}, cSave)
+		Corner(nameBox, 7)
+		local configDropdown
+		local configNames = {}
+		local function refreshConfigList()
+			configNames = listConfigs()
+			if #configNames == 0 then table.insert(configNames, "Nenhuma config") end
+			if selectedConfig and not table.find(configNames, selectedConfig) then selectedConfig = nil end
+			if not selectedConfig and configNames[1] ~= "Nenhuma config" then selectedConfig = configNames[1] end
+			if configDropdown then
+				-- Dropdown options are fixed at creation, so rebuild its text through the selector below.
+				configDropdown.Text = "  " .. (selectedConfig or "Nenhuma config")
+			end
+		end
+
+		local status = Label(cSave, "Status: ready", 12, Theme.SubText)
+		status.Size = UDim2.new(1, 0, 0, 22)
+
+		local function setStatus(ok, text)
+			status.Text = "Status: " .. text
+			status.TextColor3 = ok and Theme.Green or Theme.Red
+		end
+
+		local function saveConfig(name)
+			name = sanitizeName(name)
+			if type(writefile) ~= "function" then return false, "writefile indisponível" end
+			ensureConfigFolder()
+			local ok, err = pcall(function()
+				writefile(configPath(name), HttpService:JSONEncode({
+					version = 3,
+					name = name,
+					config = snapshotConfig(),
+					accent = encodeValue(Theme.Accent),
+				}))
+			end)
+			if not ok then return false, tostring(err) end
+			local names = listConfigs()
+			local exists = false
+			for _, n in ipairs(names) do if n:lower() == name:lower() then exists = true break end end
+			if not exists then table.insert(names, name) end
+			writeIndex(names)
+			return true, name
+		end
+
+		local function loadConfig(name)
+			if type(readfile) ~= "function" then return false, "readfile indisponível" end
+			local path = configPath(name)
+			local ok, result = pcall(function()
+				local raw = HttpService:JSONDecode(readfile(path))
+				local payload = raw.config or raw
+				local decoded = decodeValue(payload)
+				if type(decoded) ~= "table" then error("formato inválido") end
+				mergeInto(Config, decoded)
+				if type(raw) == "table" and raw.accent then
+					local loadedAccent = decodeValue(raw.accent)
+					if typeof(loadedAccent) == "Color3" then applyAccent(loadedAccent) end
+				end
+				if type(Config.LockKeys) ~= "table" then error("LockKeys inválido") end
+				rebuildAllyCache()
+				applyAccent(Theme.Accent)
+				for _, upd in ipairs(controlUpdaters) do pcall(upd) end
+				for _, entry in ipairs(lockKeyButtons) do
+					local active = false
+					for _, k in ipairs(Config.LockKeys) do if k == entry.key then active = true break end end
+					entry.btn.BackgroundColor3 = active and Theme.Accent or Theme.Element
+				end
+			end)
+			return ok, ok and name or tostring(result)
+		end
+
+		local function makeSmallButton(parent, text, col, fn)
 			local b = New("TextButton", {
 				Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = col or Theme.Accent,
 				BorderSizePixel = 0, Text = text, TextColor3 = Color3.new(1,1,1),
@@ -2298,29 +2465,102 @@ local function buildGUI()
 			b.Activated:Connect(fn)
 			return b
 		end
-		mkBtn(cSave, "Save Config", Theme.Accent, function()
-			local ok, err = pcall(function()
-				local json = HttpService:JSONEncode(ser())
-				if type(writefile) == "function" then writefile("TurboLockConfig.json", json)
-				elseif type(setclipboard) == "function" then setclipboard(json); error("no writefile — copied to clipboard") 
-				else error("no writefile") end
-			end)
-			stLbl.Text = ok and "Status: saved" or ("Status: " .. tostring(err))
-			stLbl.TextColor3 = ok and Theme.Green or Theme.Red
-		end)
-		mkBtn(cSave, "Load Config", Color3.fromRGB(160, 50, 60), function()
-			local ok, err = pcall(function()
-				if type(readfile) ~= "function" then error("no readfile") end
-				local data = HttpService:JSONDecode(readfile("TurboLockConfig.json"))
-				if not apply(data) then error("apply failed") end
-			end)
-			stLbl.Text = ok and "Status: loaded" or ("Status: " .. tostring(err))
-			stLbl.TextColor3 = ok and Theme.Green or Theme.Red
+
+		-- O dropdown abaixo é recriado sempre que a lista muda para permitir novos arquivos.
+		local selectorHolder = New("Frame", {Size = UDim2.new(1,0,0,54), BackgroundTransparency = 1, ZIndex = 20, ClipsDescendants = false}, cSave)
+		Label(selectorHolder, "Config selecionada", 13, Theme.Text).Size = UDim2.new(1,0,0,20)
+		configDropdown = New("TextButton", {
+			Size = UDim2.new(1,0,0,30), Position = UDim2.fromOffset(0,22),
+			BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text, Text = "  Nenhuma config",
+			TextSize = 12, Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left,
+			BorderSizePixel = 0, AutoButtonColor = false, ZIndex = 21,
+		}, selectorHolder)
+		Corner(configDropdown, 6)
+		local menu = New("Frame", {
+			Size = UDim2.fromOffset(220, 168), BackgroundColor3 = Theme.Panel2,
+			BorderSizePixel = 0, Visible = false, ZIndex = 400, ClipsDescendants = true,
+		}, ScreenGui)
+		Corner(menu, 6); Stroke(menu)
+		local menuScroll = New("ScrollingFrame", {
+			Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, BorderSizePixel = 0,
+			ScrollBarThickness = 4, CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ZIndex = 401,
+		}, menu)
+		New("UIListLayout", {SortOrder = Enum.SortOrder.Name}, menuScroll)
+		table.insert(AllLists, menu)
+		local function rebuildSelector()
+			for _, child in ipairs(menuScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+			configNames = listConfigs()
+			if #configNames == 0 then
+				local empty = New("TextLabel", {Size=UDim2.new(1,0,0,30), BackgroundTransparency=1, Text="  Nenhuma config salva", TextColor3=Theme.SubText, TextSize=12, Font=Enum.Font.Gotham, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=402}, menuScroll)
+			else
+				for i, name in ipairs(configNames) do
+					local b = New("TextButton", {Size=UDim2.new(1,0,0,28), BackgroundTransparency=1, Text="  "..name, TextColor3=Theme.Text, TextSize=12, Font=Enum.Font.Gotham, TextXAlignment=Enum.TextXAlignment.Left, AutoButtonColor=false, LayoutOrder=i, ZIndex=402}, menuScroll)
+					b.Activated:Connect(function()
+						selectedConfig = name
+						nameBox.Text = name
+						configDropdown.Text = "  "..name
+						menu.Visible = false
+					end)
+					b.MouseEnter:Connect(function() b.BackgroundTransparency=0; b.BackgroundColor3=Theme.Element end)
+					b.MouseLeave:Connect(function() b.BackgroundTransparency=1 end)
+				end
+			end
+		end
+		local function placeMenu()
+			local ap, as = configDropdown.AbsolutePosition, configDropdown.AbsoluteSize
+			local h = math.min(math.max(#configNames,1)*28, 168)
+			menu.Size = UDim2.fromOffset(math.max(as.X,180), h)
+			local y = ap.Y + as.Y + 4
+			if y + h > camera.ViewportSize.Y then y = ap.Y - h - 4 end
+			menu.Position = UDim2.fromOffset(ap.X, math.clamp(y,0,math.max(0,camera.ViewportSize.Y-h)))
+		end
+		configDropdown.Activated:Connect(function()
+			if menu.Visible then menu.Visible=false; return end
+			closeLists(); rebuildSelector(); placeMenu(); menu.Visible=true; OpenList=menu
 		end)
 
+		makeSmallButton(cSave, "Salvar Config", Theme.Accent, function()
+			local name = sanitizeName(nameBox.Text)
+			local ok, result = saveConfig(name)
+			if ok then
+				selectedConfig = result
+				nameBox.Text = result
+				configDropdown.Text = "  "..result
+				rebuildSelector()
+				setStatus(true, "salva: "..result)
+			else setStatus(false, result) end
+		end)
+		makeSmallButton(cSave, "Carregar Config", Color3.fromRGB(65, 145, 90), function()
+			local name = selectedConfig or sanitizeName(nameBox.Text)
+			if name == "Nenhuma config" or name == "" then setStatus(false, "selecione uma config"); return end
+			local ok, result = loadConfig(name)
+			if ok then setStatus(true, "carregada: "..result) else setStatus(false, result) end
+		end)
+		makeSmallButton(cSave, "Atualizar Lista", Theme.Element, function()
+			rebuildSelector()
+			setStatus(true, "lista atualizada")
+		end)
+		makeSmallButton(cSave, "Excluir Config", Color3.fromRGB(160, 50, 60), function()
+			local name = selectedConfig
+			if not name then setStatus(false, "selecione uma config"); return end
+			if type(delfile) ~= "function" then setStatus(false, "delfile indisponível"); return end
+			local ok, err = pcall(function() delfile(configPath(name)) end)
+			if ok then
+				local names = listConfigs(); local out={}
+				for _, n in ipairs(names) do if n:lower() ~= name:lower() then table.insert(out,n) end end
+				writeIndex(out)
+				selectedConfig=nil; nameBox.Text="MyConfig"; configDropdown.Text="  Nenhuma config"; rebuildSelector()
+				setStatus(true, "config excluída")
+			else setStatus(false, tostring(err)) end
+		end)
+
+		refreshConfigList()
+		if selectedConfig then nameBox.Text = selectedConfig; configDropdown.Text = "  "..selectedConfig end
+
 		local cInfo = Card(pCF.R, "Info", "info")
-		local info = Label(cInfo, "Icons load from GitHub (Turbo/Images).\n\nPanic Key fully kills the script GUI + lock.\n\nAim Parts: set part + offset per source.", 12, Theme.SubText)
-		info.Size = UDim2.new(1, 0, 0, 120)
+		local info = Label(cInfo, "As configs ficam em Turbo/Configs.\n\nCada arquivo salva todas as opções atuais, incluindo teclas, AimParts, whitelist, retarget, timings, teleporte e aparência.\n\nUse o seletor para escolher uma config antes de carregar.", 12, Theme.SubText)
+		info.Size = UDim2.new(1, 0, 0, 150)
 		info.TextWrapped = true
 		info.TextYAlignment = Enum.TextYAlignment.Top
 	end
