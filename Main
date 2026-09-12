@@ -584,16 +584,67 @@ local function hasBadName(model)
 	return false
 end
 
+local function isUnderAccessory(inst, rootModel)
+	local p = inst and inst.Parent
+	while p and p ~= rootModel do
+		if p:IsA("Accessory") or p:IsA("Accoutrement") then
+			return true
+		end
+		-- nomes comuns de container de acessório neste jogo
+		local n = string.lower(p.Name)
+		if string.find(n, "acc_", 1, true) or string.find(n, "accessory", 1, true) then
+			return true
+		end
+		p = p.Parent
+	end
+	return false
+end
+
+local function countBodyBaseParts(model)
+	-- conta BaseParts que NÃO estão dentro de Accessory/ACC_
+	local n = 0
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and not isUnderAccessory(d, model) then
+			n += 1
+			if n >= 2 then
+				return n
+			end
+		end
+	end
+	return n
+end
+
 local function isRealCharacter(model)
 	if not model or not model:IsA("Model") then return false end
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then return false end
 	local hrp = getRoot(model)
 	if not hrp then return false end
-	local hasHead = model:FindFirstChild("Head")
-	local hasTorso = model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso") or model:FindFirstChild("LowerTorso")
-	if not hasHead and not hasTorso then return false end
-	return true
+
+	-- PLAYER: se o Roblox reconhece como character, aceita.
+	-- Cobre R6, R15, Rthro, corpinho feminino, bundles, packs com muitos ACC_.
+	if Players:GetPlayerFromCharacter(model) then
+		return true
+	end
+
+	-- NPC / Dummy: head/torso clássicos OU qualquer body part real
+	if model:FindFirstChild("Head")
+		or model:FindFirstChild("Torso")
+		or model:FindFirstChild("UpperTorso")
+		or model:FindFirstChild("LowerTorso")
+		or model:FindFirstChild("HumanoidRootPart")
+		or model:FindFirstChild("RootPart")
+		or model:FindFirstChild("Root") then
+		return true
+	end
+
+	-- fallback: pelo menos 1 BasePart que não seja handle de acessório
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and not isUnderAccessory(d, model) then
+			return true
+		end
+	end
+	return false
 end
 
 local function isValidTarget(model)
@@ -607,9 +658,7 @@ local function isValidTarget(model)
 	local hrp = getRoot(model)
 	if not hrp then return false end
 	if not hrp:IsDescendantOf(model) then return false end
-	-- A real target must have a sane root in the loaded world. This rejects
-	-- stale/cloned rigs and bad physics states that can make the lock appear
-	-- to aim into the void.
+
 	local pos = hrp.Position
 	if pos ~= pos or pos.Magnitude > 100000 then return false end
 	local cf = hrp.CFrame
@@ -617,17 +666,17 @@ local function isValidTarget(model)
 	local rv = cf.RightVector
 	local uv = cf.UpVector
 	if lv.X ~= lv.X or rv.X ~= rv.X or uv.X ~= uv.X then return false end
-	if lv.Magnitude < 0.5 or rv.Magnitude < 0.5 or uv.Magnitude < 0.5 then return false end
-	-- Custom rigs are allowed, but a model with only a Humanoid/root is too
-	-- easy to confuse with temporary dummy/skill objects.
-	local bodyParts = 0
-	for _, child in ipairs(model:GetChildren()) do
-		if child:IsA("BasePart") then
-			bodyParts += 1
-			if bodyParts >= 2 then break end
-		end
+	if lv.Magnitude < 0.25 or rv.Magnitude < 0.25 or uv.Magnitude < 0.25 then return false end
+
+	-- Players: não exige contagem extra de parts (evita falha em rigs custom / R6 mulher)
+	local isPlayer = Players:GetPlayerFromCharacter(model) ~= nil
+	if not isPlayer then
+		-- NPCs: ainda exige alguma geometria de corpo além de lixo puro
+		-- HRP conta; acessórios NÃO contam
+		local bodyParts = countBodyBaseParts(model)
+		if bodyParts < 1 then return false end
 	end
-	if bodyParts < 2 then return false end
+
 	if isTargetCountering(model) then return false end
 	return true
 end
