@@ -410,6 +410,10 @@ end
 
 local function hardClearLock()
 	lockedTarget = nil
+	pcall(function()
+		local g = (getgenv and getgenv()) or _G
+		g.TurboLockedTarget = nil
+	end)
 	activeLockKey = nil
 	lockExpireTime = 0
 	lockStartTime = 0
@@ -614,6 +618,41 @@ local function countBodyBaseParts(model)
 	return n
 end
 
+local function isUnderAccessory(inst, rootModel)
+	local p = inst and inst.Parent
+	while p and p ~= rootModel do
+		if p:IsA("Accessory") or p:IsA("Accoutrement") then
+			return true
+		end
+		local n = string.lower(p.Name)
+		if string.find(n, "acc_", 1, true) or string.find(n, "accessory", 1, true) then
+			return true
+		end
+		p = p.Parent
+	end
+	return false
+end
+
+local function countBodyBaseParts(model)
+	local n = 0
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and not isUnderAccessory(d, model) then
+			n += 1
+			if n >= 2 then
+				return n
+			end
+		end
+	end
+	return n
+end
+
+local function publishLockTarget(t)
+	pcall(function()
+		local g = (getgenv and getgenv()) or _G
+		g.TurboLockedTarget = t
+	end)
+end
+
 local function isRealCharacter(model)
 	if not model or not model:IsA("Model") then return false end
 	local hum = model:FindFirstChildOfClass("Humanoid")
@@ -621,13 +660,12 @@ local function isRealCharacter(model)
 	local hrp = getRoot(model)
 	if not hrp then return false end
 
-	-- PLAYER: se o Roblox reconhece como character, aceita.
-	-- Cobre R6, R15, Rthro, corpinho feminino, bundles, packs com muitos ACC_.
+	-- PLAYER: aceita sempre (R6 / R15 / corpinho / bundles / muitos ACC_)
 	if Players:GetPlayerFromCharacter(model) then
 		return true
 	end
 
-	-- NPC / Dummy: head/torso clássicos OU qualquer body part real
+	-- NPC / Dummy
 	if model:FindFirstChild("Head")
 		or model:FindFirstChild("Torso")
 		or model:FindFirstChild("UpperTorso")
@@ -638,7 +676,6 @@ local function isRealCharacter(model)
 		return true
 	end
 
-	-- fallback: pelo menos 1 BasePart que não seja handle de acessório
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") and not isUnderAccessory(d, model) then
 			return true
@@ -668,11 +705,8 @@ local function isValidTarget(model)
 	if lv.X ~= lv.X or rv.X ~= rv.X or uv.X ~= uv.X then return false end
 	if lv.Magnitude < 0.25 or rv.Magnitude < 0.25 or uv.Magnitude < 0.25 then return false end
 
-	-- Players: não exige contagem extra de parts (evita falha em rigs custom / R6 mulher)
 	local isPlayer = Players:GetPlayerFromCharacter(model) ~= nil
 	if not isPlayer then
-		-- NPCs: ainda exige alguma geometria de corpo além de lixo puro
-		-- HRP conta; acessórios NÃO contam
 		local bodyParts = countBodyBaseParts(model)
 		if bodyParts < 1 then return false end
 	end
@@ -952,6 +986,7 @@ local function tryActivateLock(source)
 	target = target or getClosestTarget()
 	if not target then return false end
 	lockedTarget = target
+	publishLockTarget(lockedTarget or stickyTarget)
 	currentLockSource = source or "skill"
 	if humanoid then humanoid.AutoRotate = false end
 	watchTargetForGrab(target)
@@ -1150,7 +1185,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			return
 		end
 		stickyTarget = target
+		publishLockTarget(target)
 		lockedTarget = target
+		publishLockTarget(lockedTarget or stickyTarget)
 		currentLockSource = "sticky"
 		smoothedAimPos, smoothedAimTarget = nil, nil
 		if humanoid then humanoid.AutoRotate = false end
@@ -1167,6 +1204,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		if target then
 			priorityTarget = target
 			lockedTarget = target
+			publishLockTarget(lockedTarget or stickyTarget)
 			currentLockSource = "priority"
 			if humanoid then humanoid.AutoRotate = false end
 			watchTargetForGrab(target)
