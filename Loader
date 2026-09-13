@@ -765,6 +765,10 @@ local function toggleMenu()
     end
 end
 
+-- Forward declare: setupButton (abaixo) chama animateTabPanel no click;
+-- em Lua, "local function" só existe a partir da linha da definição.
+local animateTabPanel
+
 -- =========================================================
 -- PREMIUM HOVER + CLICK SYSTEM
 -- =========================================================
@@ -875,7 +879,9 @@ local function setupButton(button)
                         and obj.AbsoluteSize.Y >= 100
                         and obj:GetAttribute("TurboTabPanel") then
 
-                        animateTabPanel(obj)
+                        if animateTabPanel then
+                            animateTabPanel(obj)
+                        end
                     end
                 end
             end
@@ -925,7 +931,7 @@ local function getTabBasePosition(obj)
     return base
 end
 
-local function animateTabPanel(obj)
+animateTabPanel = function(obj)
     if not obj or not obj.Parent or not obj.Visible then return end
 
     local target = getTabBasePosition(obj)
