@@ -3336,4 +3336,4 @@ task.spawn(function()
 	end
 end)
 
-print("Turbo GUI v8.1 | Unique Icons | AimParts | Accent | Reduced Pixelation | Panic=" .. enumDisplay(Config.PanicKey))
+print("Turbo GUI v5.1 | Unique Icons | AimParts | Accent | Reduced Pixelation | Panic=" .. enumDisplay(Config.PanicKey))
