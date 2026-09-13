@@ -12,7 +12,7 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
 local ROOT = "Turbo"
-local RAW = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/"
+local RAW = "https://raw.githubusercontent.com/iridisluminosity/Turbo/refs/heads/main/Developer/DevMain
 
 local DIRS = {
     ROOT,
