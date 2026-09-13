@@ -1895,54 +1895,38 @@ local ICON_FILES = {
 }
 
 local iconCache = {}
+
+-- Assets are prepared by Turbo_Loader before Main executes.
+-- Main NEVER downloads icons; it only resolves already-cached files.
 local function getIcon(name)
-	if iconCache[name] ~= nil then return iconCache[name] end
-	local file = ICON_FILES[name]
-	if not file then iconCache[name] = false; return nil end
-	local url = ICON_BASE .. file
-	local ok, result = pcall(function()
-		local folder = "Turbo/Images/Icons"
-		if type(isfolder) == "function" and type(makefolder) == "function" then
-			if not isfolder(folder) then pcall(makefolder, folder) end
-		end
-		local path = folder .. "/" .. file
-		local needDownload = true
-		if type(isfile) == "function" and isfile(path) then
-			needDownload = false
-		end
-		if needDownload then
-			local data
-			if type(request) == "function" then
-				local res = request({Url = url, Method = "GET"})
-				data = res and (res.Body or res.body)
-			elseif type(http_request) == "function" then
-				local res = http_request({Url = url, Method = "GET"})
-				data = res and (res.Body or res.body)
-			elseif type(syn) == "table" and type(syn.request) == "function" then
-				local res = syn.request({Url = url, Method = "GET"})
-				data = res and (res.Body or res.body)
-			else
-				data = game:HttpGet(url)
-			end
-			if not data or #data < 50 then return nil end
-			if type(writefile) == "function" then
-				writefile(path, data)
-			else
-				return nil
-			end
-		end
-		if type(getcustomasset) == "function" then
-			return getcustomasset(path)
-		end
-		if type(getsynasset) == "function" then
-			return getsynasset(path)
-		end
-		return nil
-	end)
-	if ok and result and type(result) == "string" and #result > 0 then
-		iconCache[name] = result
-		return result
+	if iconCache[name] ~= nil then
+		return iconCache[name] or nil
 	end
+
+	local file = ICON_FILES[name]
+	if not file then
+		iconCache[name] = false
+		return nil
+	end
+
+	local path = "Turbo/Images/Icons/" .. file
+	local asset = nil
+
+	pcall(function()
+		if type(isfile) == "function" and isfile(path) then
+			if type(getcustomasset) == "function" then
+				asset = getcustomasset(path)
+			elseif type(getsynasset) == "function" then
+				asset = getsynasset(path)
+			end
+		end
+	end)
+
+	if type(asset) == "string" and #asset > 0 then
+		iconCache[name] = asset
+		return asset
+	end
+
 	iconCache[name] = false
 	return nil
 end
@@ -3337,3 +3321,453 @@ task.spawn(function()
 end)
 
 print("Turbo GUI v5.1 | Unique Icons | AimParts | Accent | Reduced Pixelation | Panic=" .. enumDisplay(Config.PanicKey))
+
+-- ============================================================
+-- TURBO PREMIUM RUNTIME
+-- Premium effects live in Main. The Loader only prepares assets.
+-- No HTTP/download work is performed here.
+-- ============================================================
+
+do
+	local PremiumSoundService = game:GetService("SoundService")
+	local PremiumTweenService = game:GetService("TweenService")
+	local PremiumUIS = game:GetService("UserInputService")
+
+	local PREMIUM_SOUND_FILES = {
+		menuOpen = {"gui_open.ogg", 0.40},
+		menuClose = {"gui_close.ogg", 0.34},
+		hover = {"hover.ogg", 0.16},
+		click = {"click.ogg", 0.28},
+		select = {"select.ogg", 0.28},
+		lock = {"lock.ogg", 0.30},
+	}
+
+	local premiumSounds = {}
+
+	local function premiumAsset(fileName)
+		local path = "Turbo/Sounds/" .. fileName
+		local asset = nil
+
+		pcall(function()
+			if type(isfile) ~= "function" or not isfile(path) then
+				return
+			end
+
+			if type(getcustomasset) == "function" then
+				asset = getcustomasset(path)
+			elseif type(getsynasset) == "function" then
+				asset = getsynasset(path)
+			end
+		end)
+
+		return asset
+	end
+
+	local function premiumSound(name, fileName, fallback, volume)
+		if premiumSounds[name] and premiumSounds[name].Parent then
+			return premiumSounds[name]
+		end
+
+		local asset = premiumAsset(fileName)
+		if not asset and fallback then
+			asset = premiumAsset(fallback)
+		end
+		if not asset then
+			return nil
+		end
+
+		local sound = Instance.new("Sound")
+		sound.Name = "TurboPremium_" .. name
+		sound.SoundId = asset
+		sound.Volume = volume or PREMIUM_SOUND_FILES[name] and PREMIUM_SOUND_FILES[name][2] or 0.25
+		sound.Parent = PremiumSoundService
+		premiumSounds[name] = sound
+
+		return sound
+	end
+
+	local function premiumPlay(name, fileName, fallback, volume)
+		local sound = premiumSound(name, fileName, fallback, volume)
+		if not sound then
+			return
+		end
+
+		pcall(function()
+			sound.Volume = volume or sound.Volume
+			sound.TimePosition = 0
+			sound:Play()
+		end)
+	end
+
+	-- Preload every interaction sound from the local cache.
+	for name, info in pairs(PREMIUM_SOUND_FILES) do
+		premiumSound(name, info[1], nil, info[2])
+	end
+
+	-- ----------------------------------------------------------
+	-- MENU OPEN / CLOSE ANIMATION
+	-- Replaces Main's instant visibility switch without touching
+	-- any of the actual lock logic.
+	-- ----------------------------------------------------------
+
+	local originalSetMenu = setMenu
+	local premiumMenuBusy = false
+
+	local function menuTweenOpen()
+		if not ScreenGui or not Main or not Main.Parent then
+			return
+		end
+
+		ScreenGui.Enabled = true
+		Main.Visible = true
+
+		local scale = Main:FindFirstChild("TurboPremiumMenuScale")
+		if not scale then
+			scale = Instance.new("UIScale")
+			scale.Name = "TurboPremiumMenuScale"
+			scale.Parent = Main
+		end
+
+		local basePosition = Main.Position
+		scale.Scale = 0.965
+		Main.Position = basePosition + UDim2.fromOffset(0, 12)
+
+		PremiumTweenService:Create(
+			scale,
+			TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{Scale = 1}
+		):Play()
+
+		PremiumTweenService:Create(
+			Main,
+			TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{Position = basePosition}
+		):Play()
+
+		premiumPlay("menuOpen", "gui_open.ogg", "click.ogg", 0.40)
+	end
+
+	local function menuTweenClose()
+		if not ScreenGui or not Main or not Main.Parent then
+			return
+		end
+
+		local scale = Main:FindFirstChild("TurboPremiumMenuScale")
+		if not scale then
+			scale = Instance.new("UIScale")
+			scale.Name = "TurboPremiumMenuScale"
+			scale.Parent = Main
+		end
+
+		local basePosition = Main.Position
+
+		PremiumTweenService:Create(
+			scale,
+			TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+			{Scale = 0.965}
+		):Play()
+
+		PremiumTweenService:Create(
+			Main,
+			TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+			{Position = basePosition + UDim2.fromOffset(0, 10)}
+		):Play()
+
+		premiumPlay("menuClose", "gui_close.ogg", "click.ogg", 0.34)
+
+		task.delay(0.21, function()
+			if not ScreenGui or not ScreenGui.Parent then
+				return
+			end
+			if not MenuOpen then
+				Main.Position = basePosition
+				scale.Scale = 1
+				ScreenGui.Enabled = false
+			end
+		end)
+	end
+
+	setMenu = function(v)
+		if premiumMenuBusy then
+			return
+		end
+
+		MenuOpen = v == true
+
+		if not MenuOpen then
+			closeLists()
+			Binding = nil
+			clearFocus()
+
+			premiumMenuBusy = true
+			menuTweenClose()
+			task.delay(0.22, function()
+				premiumMenuBusy = false
+			end)
+		else
+			clearFocus()
+
+			premiumMenuBusy = true
+			menuTweenOpen()
+			task.delay(0.36, function()
+				premiumMenuBusy = false
+			end)
+		end
+	end
+
+	-- ----------------------------------------------------------
+	-- BUTTON HOVER + CLICK FX
+	-- ----------------------------------------------------------
+
+	local function setupPremiumButton(button)
+		if not button or not button:IsA("GuiButton") then
+			return
+		end
+		if button:GetAttribute("TurboPremiumHooked") then
+			return
+		end
+
+		button:SetAttribute("TurboPremiumHooked", true)
+		button.AutoButtonColor = false
+
+		local scale = button:FindFirstChild("TurboHoverScale")
+		if not scale then
+			scale = Instance.new("UIScale")
+			scale.Name = "TurboHoverScale"
+			scale.Scale = 1
+			scale.Parent = button
+		end
+
+		local stroke = button:FindFirstChild("TurboHoverStroke")
+		if not stroke then
+			stroke = Instance.new("UIStroke")
+			stroke.Name = "TurboHoverStroke"
+			stroke.Thickness = 1
+			stroke.Transparency = 1
+			stroke.Color = Theme.Accent
+			stroke.Parent = button
+		end
+
+		button.MouseEnter:Connect(function()
+			if not button.Parent then return end
+
+			PremiumTweenService:Create(
+				scale,
+				TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{Scale = 1.035}
+			):Play()
+
+			PremiumTweenService:Create(
+				stroke,
+				TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{Transparency = 0.35}
+			):Play()
+
+			premiumPlay("hover", "hover.ogg", "click.ogg", 0.16)
+		end)
+
+		button.MouseLeave:Connect(function()
+			if not button.Parent then return end
+
+			PremiumTweenService:Create(
+				scale,
+				TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{Scale = 1}
+			):Play()
+
+			PremiumTweenService:Create(
+				stroke,
+				TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{Transparency = 1}
+			):Play()
+		end)
+
+		button.Activated:Connect(function()
+			if not button.Parent then return end
+
+			PremiumTweenService:Create(
+				scale,
+				TweenInfo.new(0.065, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{Scale = 0.96}
+			):Play()
+
+			task.delay(0.065, function()
+				if scale and scale.Parent then
+					PremiumTweenService:Create(
+						scale,
+						TweenInfo.new(0.17, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+						{Scale = 1}
+					):Play()
+				end
+			end)
+
+			premiumPlay("click", "click.ogg", "select.ogg", 0.28)
+		end)
+	end
+
+	for _, obj in ipairs(ScreenGui:GetDescendants()) do
+		setupPremiumButton(obj)
+	end
+
+	ScreenGui.DescendantAdded:Connect(function(obj)
+		task.defer(function()
+			setupPremiumButton(obj)
+		end)
+	end)
+
+	-- ----------------------------------------------------------
+	-- TAB TRANSITIONS
+	-- ----------------------------------------------------------
+
+	local tabBasePositions = setmetatable({}, {__mode = "k"})
+
+	local function animatePremiumTab(panel)
+		if not panel or not panel.Parent or not panel.Visible then
+			return
+		end
+
+		local base = tabBasePositions[panel]
+		if not base then
+			base = panel.Position
+			tabBasePositions[panel] = base
+		end
+
+		local scale = panel:FindFirstChild("TurboPremiumTabScale")
+		if not scale then
+			scale = Instance.new("UIScale")
+			scale.Name = "TurboPremiumTabScale"
+			scale.Scale = 1
+			scale.Parent = panel
+		end
+
+		scale.Scale = 0.985
+		panel.Position = base + UDim2.fromOffset(10, 0)
+
+		PremiumTweenService:Create(
+			scale,
+			TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{Scale = 1}
+		):Play()
+
+		PremiumTweenService:Create(
+			panel,
+			TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{Position = base}
+		):Play()
+	end
+
+	local originalSelectTab = selectTab
+	selectTab = function(name)
+		originalSelectTab(name)
+
+		local page = Pages[name]
+		if page and page.sc then
+			task.defer(function()
+				animatePremiumTab(page.sc)
+			end)
+		end
+
+		premiumPlay("select", "select.ogg", "click.ogg", 0.28)
+	end
+
+	-- ----------------------------------------------------------
+	-- SWITCH / TOGGLE FX
+	-- ----------------------------------------------------------
+
+	local function setupPremiumSwitch(button)
+		if not button or not button:IsA("GuiButton") then
+			return
+		end
+		if button:GetAttribute("TurboSwitchHooked") then
+			return
+		end
+
+		local text = ""
+		pcall(function()
+			text = button:IsA("TextButton") and button.Text or ""
+		end)
+
+		local name = string.lower(button.Name .. " " .. tostring(text))
+		if not (
+			name:find("enable", 1, true)
+			or name:find("disable", 1, true)
+			or name:find("toggle", 1, true)
+			or name:find("switch", 1, true)
+			or name:find("lock", 1, true)
+		) then
+			return
+		end
+
+		button:SetAttribute("TurboSwitchHooked", true)
+
+		button.Activated:Connect(function()
+			premiumPlay("select", "select.ogg", "click.ogg", 0.30)
+
+			local scale = button:FindFirstChild("TurboSwitchScale")
+			if not scale then
+				scale = Instance.new("UIScale")
+				scale.Name = "TurboSwitchScale"
+				scale.Parent = button
+			end
+
+			PremiumTweenService:Create(
+				scale,
+				TweenInfo.new(0.07, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{Scale = 0.95}
+			):Play()
+
+			task.delay(0.07, function()
+				if scale and scale.Parent then
+					PremiumTweenService:Create(
+						scale,
+						TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+						{Scale = 1}
+					):Play()
+				end
+			end)
+		end)
+	end
+
+	for _, obj in ipairs(ScreenGui:GetDescendants()) do
+		setupPremiumSwitch(obj)
+	end
+
+	ScreenGui.DescendantAdded:Connect(function(obj)
+		task.defer(function()
+			setupPremiumSwitch(obj)
+		end)
+	end)
+
+	-- ----------------------------------------------------------
+	-- LOCK SOUND
+	-- ----------------------------------------------------------
+
+	PremiumUIS.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if not ScreenGui or not ScreenGui.Parent or not ScreenGui.Enabled then return end
+
+		if input.KeyCode == Config.PriorityKey then
+			premiumPlay("lock", "lock.ogg", "select.ogg", 0.30)
+		elseif Config.PriorityAlsoRightAlt and input.KeyCode == Enum.KeyCode.RightAlt then
+			premiumPlay("lock", "lock.ogg", "select.ogg", 0.30)
+		elseif input.KeyCode == Config.StickyLockKey then
+			premiumPlay("lock", "lock.ogg", "select.ogg", 0.30)
+		end
+	end)
+
+	-- Main already owns Insert. We only provide the animation through setMenu.
+	-- This avoids the double-toggle that existed when the Loader also listened to Insert.
+
+	pcall(function()
+		ScreenGui.DisplayOrder = 2147483645
+		ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+	end)
+
+	print("[Turbo] Premium Main Runtime: ON")
+	print("[Turbo] Premium Sounds: ON")
+	print("[Turbo] Button Hover + Click FX: ON")
+	print("[Turbo] Tab Transition FX: ON")
+	print("[Turbo] Toggle/Switch FX: ON")
+	print("[Turbo] Insert Menu Animation: ON")
+	print("[Turbo] Alt/RightAlt Lock Sound: ON")
+end
