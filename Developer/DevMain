@@ -2166,9 +2166,26 @@ local function buildGUI()
 			end
 
 			if ic and ic:IsA("ImageLabel") then
+
+
+				-- FIX: sidebar icons NEVER shrink when collapsing.
+
+
+				-- Keep the exact 65x65 render size in both states; only the
+
+
+				-- position changes so the icon stays centered in the compact tab.
+
+
 				Tween(ic, {
-					Position = collapsed and UDim2.new(0.5, -24, 0, -1) or UDim2.fromOffset(8, 0),
-					Size = collapsed and UDim2.fromOffset(48, 64) or UDim2.fromOffset(65, 65),
+
+
+					Position = collapsed and UDim2.new(0.5, -32.5, 0.5, -32.5) or UDim2.fromOffset(8, -1),
+
+
+					Size = UDim2.fromOffset(65, 65),
+
+
 				}, info)
 			elseif ic then
 				Tween(ic, {
