@@ -10,7 +10,8 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
 local ROOT = "Turbo"
-local RAW = "https://raw.githubusercontent.com/iridisluminosity/Turbo/refs/heads/main/Developer/DevMain"
+local BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/refs/heads/main/"
+local MAIN_URL = BASE .. "Developer/DevMain"
 
 local DIRS = {
     ROOT,
@@ -110,15 +111,57 @@ end
 -- =========================================================
 
 local requiredSounds = {
-    {"gui_open.ogg", "gui_open.ogg"},\n    {"gui_close.ogg", "gui_close.ogg"},\n    {"hover.ogg", "hover.ogg"},\n    {"click.ogg", "click.ogg"},\n    {"select.ogg", "select.ogg"},\n    {"lock.ogg", "lock.ogg"},\n
+    {"gui_open.ogg", "gui_open.ogg"},
+    {"gui_close.ogg", "gui_close.ogg"},
+    {"hover.ogg", "hover.ogg"},
+    {"click.ogg", "click.ogg"},
+    {"select.ogg", "select.ogg"},
+    {"lock.ogg", "lock.ogg"},
+
 }
 
 local requiredIcons = {
-    {"aim.png", "aim.png"},\n    {"always.png", "always.png"},\n    {"behind.png", "behind.png"},\n    {"bind.png", "bind.png"},\n    {"block.png", "block.png"},\n    {"body_parts.png", "body_parts.png"},\n    {"character.png", "character.png"},\n    {"config.png", "config.png"},\n    {"console.png", "console.png"},\n    {"contacts.png", "contacts.png"},\n    {"crosshair.png", "crosshair.png"},\n    {"dashboard.png", "dashboard.png"},\n    {"deadzone.png", "deadzone.png"},\n    {"delay.png", "delay.png"},\n    {"distance.png", "distance.png"},\n    {"eye.png", "eye.png"},\n    {"file.png", "file.png"},\n    {"file_config.png", "file_config.png"},\n    {"hidden.png", "hidden.png"},\n    {"hourglass.png", "hourglass.png"},\n    {"info.png", "info.png"},\n    {"keyboard.png", "keyboard.png"},\n    {"methods.png", "methods.png"},\n    {"mouse.png", "mouse.png"},\n    {"panic.png", "panic.png"},\n    {"prediction.png", "prediction.png"},\n    {"priority.png", "priority.png"},\n    {"shield.png", "shield.png"},\n    {"smooth.png", "smooth.png"},\n    {"target.png", "target.png"},\n
+    {"aim.png", "aim.png"},
+    {"always.png", "always.png"},
+    {"behind.png", "behind.png"},
+    {"bind.png", "bind.png"},
+    {"block.png", "block.png"},
+    {"body_parts.png", "body_parts.png"},
+    {"character.png", "character.png"},
+    {"config.png", "config.png"},
+    {"console.png", "console.png"},
+    {"contacts.png", "contacts.png"},
+    {"crosshair.png", "crosshair.png"},
+    {"dashboard.png", "dashboard.png"},
+    {"deadzone.png", "deadzone.png"},
+    {"delay.png", "delay.png"},
+    {"distance.png", "distance.png"},
+    {"eye.png", "eye.png"},
+    {"file.png", "file.png"},
+    {"file_config.png", "file_config.png"},
+    {"hidden.png", "hidden.png"},
+    {"hourglass.png", "hourglass.png"},
+    {"info.png", "info.png"},
+    {"keyboard.png", "keyboard.png"},
+    {"methods.png", "methods.png"},
+    {"mouse.png", "mouse.png"},
+    {"panic.png", "panic.png"},
+    {"prediction.png", "prediction.png"},
+    {"priority.png", "priority.png"},
+    {"shield.png", "shield.png"},
+    {"smooth.png", "smooth.png"},
+    {"target.png", "target.png"},
+
 }
 
 local requiredAnimationFrames = {
-    {"BoostLoading.png", "BoostLoading.png"},\n    {"BoostLoading1.png", "BoostLoading1.png"},\n    {"BoostLoading2.png", "BoostLoading2.png"},\n    {"BoostLoading3.png", "BoostLoading3.png"},\n    {"BoostLoading4.png", "BoostLoading4.png"},\n    {"BoostLoading5.png", "BoostLoading5.png"},\n
+    {"BoostLoading.png", "BoostLoading.png"},
+    {"BoostLoading1.png", "BoostLoading1.png"},
+    {"BoostLoading2.png", "BoostLoading2.png"},
+    {"BoostLoading3.png", "BoostLoading3.png"},
+    {"BoostLoading4.png", "BoostLoading4.png"},
+    {"BoostLoading5.png", "BoostLoading5.png"},
+
 }
 
 local totalAssets = #requiredSounds + #requiredIcons + #requiredAnimationFrames
@@ -145,21 +188,21 @@ end
 
 prepareList(
     requiredSounds,
-    RAW .. "Sounds/",
+    BASE .. "Sounds/",
     ROOT .. "/Sounds/",
     "Sound"
 )
 
 prepareList(
     requiredIcons,
-    RAW .. "Images/",
+    BASE .. "Images/",
     ROOT .. "/Images/Icons/",
     "Icon"
 )
 
 prepareList(
     requiredAnimationFrames,
-    RAW .. "Images/Animations/LoadingAnimation/",
+    BASE .. "Images/Animations/LoadingAnimation/",
     ROOT .. "/Images/Animations/",
     "Animation"
 )
@@ -204,8 +247,8 @@ local function saneMain(data)
         and not data:find("\0", 1, true)
 end
 
-local mainCode = httpGet(RAW .. "Main")
-local manifest = httpGet(RAW .. "Configs/integrity.txt")
+local mainCode = httpGet(MAIN_URL)
+local manifest = httpGet(BASE .. "Configs/integrity.txt")
 local expected = manifest and manifest:match("MAIN%s*=%s*([%x]+)")
 local actual = mainCode and fnv1a(mainCode) or nil
 
