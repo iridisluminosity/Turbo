@@ -1886,6 +1886,7 @@ local MenuOpen = true
 local currentTab = nil
 local Pages, TabBtns = {}, {}
 local ScreenGui, Main, Top, TopLine, Title, StatusLbl
+local premiumPlay
 
 local ICON_BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/Images/"
 local ICON_FILES = {
@@ -2125,15 +2126,31 @@ local function buildGUI()
 	local collapsedMainPosition = UDim2.new(0.5, -360, 0.5, -280)
 
 	local function setSidebarCollapsed(collapsed, instant)
+		-- IMPORTANT: never recenter the GUI when collapsing/expanding.
+		-- The old code replaced Main.Position with a fixed center position,
+		-- so a GUI that had been dragged elsewhere would teleport to the middle.
+		-- Keep the current visual center instead, adjusting only the offset needed
+		-- for the width change.
 		sidebarCollapsed = collapsed
 
 		local sideWidth = collapsed and 64 or 200
 		local mainSize = collapsed and collapsedMainSize or expandedMainSize
+		local oldSize = Main.AbsoluteSize
+		local newWidth = mainSize.X.Offset
+		local newHeight = mainSize.Y.Offset
+
+		local currentPosition = Main.Position
+		local keepCenterPosition = UDim2.new(
+			currentPosition.X.Scale,
+			currentPosition.X.Offset + (oldSize.X - newWidth) / 2,
+			currentPosition.Y.Scale,
+			currentPosition.Y.Offset + (oldSize.Y - newHeight) / 2
+		)
 
 		local info = instant and 0 or 0.22
 		if info <= 0 then
 			Main.Size = mainSize
-			Main.Position = collapsed and collapsedMainPosition or expandedMainPosition
+			Main.Position = keepCenterPosition
 			Side.Size = UDim2.fromOffset(sideWidth, 508)
 			sideStroke.Position = UDim2.new(1, -1, 0, 0)
 			Content.Position = UDim2.fromOffset(sideWidth, 52)
@@ -2141,7 +2158,7 @@ local function buildGUI()
 		else
 			Tween(Main, {
 				Size = mainSize,
-				Position = collapsed and collapsedMainPosition or expandedMainPosition,
+				Position = keepCenterPosition,
 			}, info)
 			Tween(Side, {Size = UDim2.fromOffset(sideWidth, 508)}, info)
 			Tween(Content, {
@@ -2166,26 +2183,9 @@ local function buildGUI()
 			end
 
 			if ic and ic:IsA("ImageLabel") then
-
-
-				-- FIX: sidebar icons NEVER shrink when collapsing.
-
-
-				-- Keep the exact 65x65 render size in both states; only the
-
-
-				-- position changes so the icon stays centered in the compact tab.
-
-
 				Tween(ic, {
-
-
-					Position = collapsed and UDim2.new(0.5, -32.5, 0.5, -32.5) or UDim2.fromOffset(8, -1),
-
-
-					Size = UDim2.fromOffset(65, 65),
-
-
+					Position = collapsed and UDim2.new(0.5, -24, 0, -1) or UDim2.fromOffset(8, 0),
+					Size = collapsed and UDim2.fromOffset(48, 64) or UDim2.fromOffset(65, 65),
 				}, info)
 			elseif ic then
 				Tween(ic, {
@@ -3442,6 +3442,13 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	-- Panic is checked before the processed flag so END still works
 	-- when Roblox/executor marks the keyboard event as processed.
 	if input.KeyCode == Config.PanicKey then
+		-- END must always trigger its feedback even when Roblox marks the
+		-- keyboard event as processed. The panic dialog used to open silently.
+		pcall(function()
+			if type(premiumPlay) == "function" then
+				premiumPlay("click", "click.ogg", "select.ogg", 0.30)
+			end
+		end)
 		showPanicConfirm()
 		return
 	end
@@ -3553,7 +3560,7 @@ do
 		return sound
 	end
 
-	local function premiumPlay(name, fileName, fallback, volume)
+	premiumPlay = function(name, fileName, fallback, volume)
 		local sound = premiumSound(name, fileName, fallback, volume)
 		if not sound then
 			return
