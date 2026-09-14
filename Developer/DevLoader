@@ -227,7 +227,7 @@ for _, name in ipairs(frames) do
     local path = ROOT .. "/Images/Animations/" .. name
 
     local asset = cache(
-        RAW .. "Images/Animations/LoadingAnimation/" .. name,
+        BASE .. "Images/Animations/LoadingAnimation/" .. name,
         path
     )
 
@@ -538,7 +538,6 @@ if not TurboGui then
     end
 end
 
--- The runtime below needs the actual GUI and Main locals from Main.
 
 -- =========================================================
 -- LOADER FINISHED
