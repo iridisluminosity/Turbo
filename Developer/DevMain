@@ -2121,8 +2121,6 @@ local function buildGUI()
 	local sidebarCollapsed = false
 	local expandedMainSize = UDim2.fromOffset(860, 560)
 	local collapsedMainSize = UDim2.fromOffset(720, 560)
-	local expandedMainPosition = UDim2.new(0.5, -430, 0.5, -280)
-	local collapsedMainPosition = UDim2.new(0.5, -360, 0.5, -280)
 
 	local function setSidebarCollapsed(collapsed, instant)
 		sidebarCollapsed = collapsed
@@ -2132,16 +2130,18 @@ local function buildGUI()
 
 		local info = instant and 0 or 0.22
 		if info <= 0 then
+			-- Preserve the GUI position chosen by the user. Collapsing/expanding
+			-- changes only the size/layout; it must never recenter or teleport Main.
 			Main.Size = mainSize
-			Main.Position = collapsed and collapsedMainPosition or expandedMainPosition
 			Side.Size = UDim2.fromOffset(sideWidth, 508)
 			sideStroke.Position = UDim2.new(1, -1, 0, 0)
 			Content.Position = UDim2.fromOffset(sideWidth, 52)
 			Content.Size = UDim2.new(1, -sideWidth, 1, -52)
 		else
+			-- Do not tween Main.Position here. The user's dragged position must be
+			-- preserved while the sidebar is collapsed/expanded.
 			Tween(Main, {
 				Size = mainSize,
-				Position = collapsed and collapsedMainPosition or expandedMainPosition,
 			}, info)
 			Tween(Side, {Size = UDim2.fromOffset(sideWidth, 508)}, info)
 			Tween(Content, {
@@ -3910,6 +3910,16 @@ do
 	-- ----------------------------------------------------------
 
 	PremiumUIS.InputBegan:Connect(function(input, processed)
+		-- END must still receive its premium feedback sound even when Roblox
+		-- marks the keyboard input as processed. The main input handler already
+		-- handles the Panic confirmation itself.
+		if input.KeyCode == Config.PanicKey then
+			if ScreenGui and ScreenGui.Parent then
+				premiumPlay("click", "click.ogg", "select.ogg", 0.28)
+			end
+			return
+		end
+
 		if processed then return end
 		if not ScreenGui or not ScreenGui.Parent or not ScreenGui.Enabled then return end
 
