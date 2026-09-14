@@ -2133,17 +2133,15 @@ local function buildGUI()
 		local info = instant and 0 or 0.22
 		if info <= 0 then
 			Main.Size = mainSize
-			-- Keep the GUI exactly where the user dragged it.
-			-- Collapsing/expanding must never recenter or teleport Main.
+			Main.Position = collapsed and collapsedMainPosition or expandedMainPosition
 			Side.Size = UDim2.fromOffset(sideWidth, 508)
 			sideStroke.Position = UDim2.new(1, -1, 0, 0)
 			Content.Position = UDim2.fromOffset(sideWidth, 52)
 			Content.Size = UDim2.new(1, -sideWidth, 1, -52)
 		else
-			-- Only resize Main; deliberately do NOT tween Position.
-			-- This preserves the exact position chosen by the user.
 			Tween(Main, {
 				Size = mainSize,
+				Position = collapsed and collapsedMainPosition or expandedMainPosition,
 			}, info)
 			Tween(Side, {Size = UDim2.fromOffset(sideWidth, 508)}, info)
 			Tween(Content, {
@@ -2168,9 +2166,26 @@ local function buildGUI()
 			end
 
 			if ic and ic:IsA("ImageLabel") then
+
+
+				-- FIX: sidebar icons NEVER shrink when collapsing.
+
+
+				-- Keep the exact 65x65 render size in both states; only the
+
+
+				-- position changes so the icon stays centered in the compact tab.
+
+
 				Tween(ic, {
-					Position = collapsed and UDim2.new(0.5, -24, 0, -1) or UDim2.fromOffset(8, 0),
-					Size = collapsed and UDim2.fromOffset(48, 64) or UDim2.fromOffset(65, 65),
+
+
+					Position = collapsed and UDim2.new(0.5, -32.5, 0.5, -32.5) or UDim2.fromOffset(8, -1),
+
+
+					Size = UDim2.fromOffset(65, 65),
+
+
 				}, info)
 			elseif ic then
 				Tween(ic, {
@@ -3895,17 +3910,8 @@ do
 	-- ----------------------------------------------------------
 
 	PremiumUIS.InputBegan:Connect(function(input, processed)
-		if not ScreenGui or not ScreenGui.Parent then return end
-
-		-- END/Panic must also receive its premium feedback sound even if
-		-- Roblox/executor marks the keyboard input as processed.
-		if input.KeyCode == Config.PanicKey then
-			premiumPlay("click", "click.ogg", "select.ogg", 0.28)
-			return
-		end
-
 		if processed then return end
-		if not ScreenGui.Enabled then return end
+		if not ScreenGui or not ScreenGui.Parent or not ScreenGui.Enabled then return end
 
 		if input.KeyCode == Config.PriorityKey then
 			premiumPlay("lock", "lock.ogg", "select.ogg", 0.30)
