@@ -1880,7 +1880,6 @@ local currentTab = nil
 local Pages, TabBtns = {}, {}
 local ScreenGui, Main, Top, TopLine, Title, StatusLbl
 
-local ICON_BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/Images/"
 local ICON_FILES = {
 	character = "character.png", aim_parts = "body_parts.png", whitelist = "hidden.png",
 	settings = "config.png", config = "file_config.png", methods = "methods.png",
