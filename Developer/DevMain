@@ -28,6 +28,8 @@ local Config = {
 	},
 
 	UseMouseButton1      = true,
+	UseMouseButton2      = false,
+	AddKey               = Enum.KeyCode.Unknown,
 	ToggleKey            = Enum.KeyCode.Insert,
 	EnableLockKey        = Enum.KeyCode.CapsLock,
 	BlockKey             = Enum.KeyCode.F,
@@ -1259,6 +1261,9 @@ local function isActivelyHolding()
 	if Config.UseMouseButton1 and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
 		return true
 	end
+	if Config.UseMouseButton2 and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+		return true
+	end
 	return false
 end
 
@@ -1475,7 +1480,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		end
 		return
 	end
-	if Config.UseMouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if (Config.UseMouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1)
+		or (Config.UseMouseButton2 and input.UserInputType == Enum.UserInputType.MouseButton2) then
 		isHoldingMouse = true
 		mousePressTime = tick()
 		lockExpireTime = 0
@@ -1492,7 +1498,8 @@ end)
 UserInputService.InputEnded:Connect(function(input)
 	if turboPanicked then return end
 
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.MouseButton2 then
 		if isHoldingMouse then
 			local held = tick() - (mousePressTime > 0 and mousePressTime or tick())
 			isHoldingMouse = false
@@ -1880,8 +1887,9 @@ local currentTab = nil
 local Pages, TabBtns = {}, {}
 local ScreenGui, Main, Top, TopLine, Title, StatusLbl
 
+local ICON_BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/Images/"
 local ICON_FILES = {
-	character = "character.png", aim_parts = "body_parts.png", whitelist = "hidden.png",
+	turbo = "turbo.png", character = "character.png", aim_parts = "body_parts.png", whitelist = "hidden.png",
 	settings = "config.png", config = "file_config.png", methods = "methods.png",
 	aim = "aim.png", target = "target.png", crosshair = "crosshair.png",
 	body_parts = "body_parts.png", prediction = "prediction.png", smooth = "smooth.png",
@@ -2027,7 +2035,7 @@ local function buildGUI()
 
 	Main = New("Frame", {
 		Size = UDim2.fromOffset(860, 560),
-		Position = UDim2.new(0.5, -410, 0.5, -270),
+		Position = UDim2.new(0.5, -430, 0.5, -280),
 		BackgroundColor3 = Theme.Bg, BorderSizePixel = 0,
 		Active = true, ClipsDescendants = true,
 	}, ScreenGui)
@@ -2041,31 +2049,141 @@ local function buildGUI()
 	New("Frame", {Size = UDim2.new(1, 0, 0, 16), Position = UDim2.new(0, 0, 1, -16), BackgroundColor3 = Theme.Panel, BorderSizePixel = 0}, Top)
 	TopLine = New("Frame", {Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Theme.Accent, BorderSizePixel = 0}, Top)
 
+	local TurboIcon = nil
+	local turboAsset = getIcon("turbo")
+	if turboAsset then
+		TurboIcon = New("ImageLabel", {
+			Name = "TurboIcon", Size = UDim2.fromOffset(30, 30), Position = UDim2.fromOffset(12, 11),
+			BackgroundTransparency = 1, Image = turboAsset, ImageColor3 = Theme.Accent,
+			ScaleType = Enum.ScaleType.Fit, ResampleMode = Enum.ResamplerMode.Default,
+		}, Top)
+		table.insert(accentElements, TurboIcon)
+	else
+		TurboIcon = Label(Top, "T", 18, Theme.Accent, true)
+		TurboIcon.Name = "TurboIcon"
+		TurboIcon.Size = UDim2.fromOffset(30, 52)
+		TurboIcon.Position = UDim2.fromOffset(12, 0)
+		TurboIcon.TextXAlignment = Enum.TextXAlignment.Center
+	end
+
 	Title = Label(Top, "Turbo", 20, Theme.Accent, true)
-	Title.Position = UDim2.fromOffset(18, 0)
-	Title.Size = UDim2.fromOffset(90, 52)
-	local Sub = Label(Top, "🚀 ·  Character", 12, Theme.SubText)
-	Sub.Position = UDim2.fromOffset(110, 0)
-	Sub.Size = UDim2.fromOffset(260, 52)
+	Title.Position = UDim2.fromOffset(48, 0)
+	Title.Size = UDim2.fromOffset(120, 52)
+
 	StatusLbl = Label(Top, "● ACTIVE", 12, Theme.Green, true)
 	StatusLbl.Position = UDim2.new(1, -130, 0, 0)
 	StatusLbl.Size = UDim2.fromOffset(115, 52)
 	StatusLbl.TextXAlignment = Enum.TextXAlignment.Right
 
 	local Side = New("Frame", {
-		Size = UDim2.fromOffset(200, 568), Position = UDim2.fromOffset(0, 52),
+		Name = "Sidebar",
+		Size = UDim2.fromOffset(200, 508), Position = UDim2.fromOffset(0, 52),
 		BackgroundColor3 = Theme.Panel, BorderSizePixel = 0,
 	}, Main)
-	New("Frame", {Size = UDim2.fromOffset(1, 568), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = Theme.Stroke, BorderSizePixel = 0}, Side)
+	local sideStroke = New("Frame", {
+		Name = "SidebarStroke", Size = UDim2.fromOffset(1, 508), Position = UDim2.new(1, -1, 0, 0),
+		BackgroundColor3 = Theme.Stroke, BorderSizePixel = 0,
+	}, Side)
+
+	local CollapseBtn = New("TextButton", {
+		Name = "CollapseButton",
+		Size = UDim2.fromOffset(44, 30), Position = UDim2.new(0.5, -22, 0, 7),
+		BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Text = "‹",
+		TextColor3 = Theme.Text, TextSize = 24, Font = Enum.Font.GothamBold,
+		AutoButtonColor = false, ZIndex = 10,
+	}, Side)
+	Corner(CollapseBtn, 7)
+
 	local TabBox = New("Frame", {
-		Size = UDim2.new(1, -14, 1, -18), Position = UDim2.fromOffset(7, 12), BackgroundTransparency = 1,
+		Name = "MainTabs",
+		Size = UDim2.new(1, -14, 1, -78), Position = UDim2.fromOffset(7, 45),
+		BackgroundTransparency = 1,
 	}, Side)
 	New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, TabBox)
+
+	local BottomTabBox = New("Frame", {
+		Name = "BottomTabs",
+		Size = UDim2.new(1, -14, 0, 130), Position = UDim2.new(0, 7, 1, -136),
+		BackgroundTransparency = 1,
+	}, Side)
+	New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, BottomTabBox)
+
+	local BottomSeparator = New("Frame", {
+		Name = "BottomSeparator", Size = UDim2.new(1, -18, 0, 1), Position = UDim2.new(0, 9, 1, -140),
+		BackgroundColor3 = Theme.Stroke, BorderSizePixel = 0,
+	}, Side)
 
 	local Content = New("Frame", {
 		Size = UDim2.new(1, -200, 1, -52), Position = UDim2.fromOffset(200, 52),
 		BackgroundTransparency = 1, ClipsDescendants = true,
 	}, Main)
+
+	local sidebarCollapsed = false
+	local expandedMainSize = UDim2.fromOffset(860, 560)
+	local collapsedMainSize = UDim2.fromOffset(720, 560)
+	local expandedMainPosition = UDim2.new(0.5, -430, 0.5, -280)
+	local collapsedMainPosition = UDim2.new(0.5, -360, 0.5, -280)
+
+	local function setSidebarCollapsed(collapsed, instant)
+		sidebarCollapsed = collapsed
+
+		local sideWidth = collapsed and 64 or 200
+		local mainSize = collapsed and collapsedMainSize or expandedMainSize
+
+		local info = instant and 0 or 0.22
+		if info <= 0 then
+			Main.Size = mainSize
+			Main.Position = collapsed and collapsedMainPosition or expandedMainPosition
+			Side.Size = UDim2.fromOffset(sideWidth, 508)
+			sideStroke.Position = UDim2.new(1, -1, 0, 0)
+			Content.Position = UDim2.fromOffset(sideWidth, 52)
+			Content.Size = UDim2.new(1, -sideWidth, 1, -52)
+		else
+			Tween(Main, {
+				Size = mainSize,
+				Position = collapsed and collapsedMainPosition or expandedMainPosition,
+			}, info)
+			Tween(Side, {Size = UDim2.fromOffset(sideWidth, 508)}, info)
+			Tween(Content, {
+				Position = UDim2.fromOffset(sideWidth, 52),
+				Size = UDim2.new(1, -sideWidth, 1, -52),
+			}, info)
+		end
+
+		Tween(CollapseBtn, {
+			Position = UDim2.new(0.5, -22, 0, 7),
+			Rotation = collapsed and 180 or 0,
+		}, info)
+
+		for name, b in pairs(TabBtns) do
+			local tx = b:FindFirstChild("TabText")
+			local ic = b:FindFirstChild("IconImg")
+
+			if tx then
+				Tween(tx, {
+					TextTransparency = collapsed and 1 or 0,
+				}, info)
+			end
+
+			if ic and ic:IsA("ImageLabel") then
+				Tween(ic, {
+					Position = collapsed and UDim2.new(0.5, -24, 0, -1) or UDim2.fromOffset(8, 0),
+					Size = collapsed and UDim2.fromOffset(48, 64) or UDim2.fromOffset(65, 65),
+				}, info)
+			elseif ic then
+				Tween(ic, {
+					Position = collapsed and UDim2.new(0.5, -25, 0, 0) or UDim2.fromOffset(10, 0),
+				}, info)
+			end
+		end
+
+		Tween(BottomSeparator, {
+			Size = UDim2.new(1, -18, 0, 1),
+			Position = UDim2.new(0, 9, 1, -140),
+		}, info)
+
+		CollapseBtn.Text = collapsed and "›" or "‹"
+	end
 
 	local function makePage(name)
 		local sc = New("ScrollingFrame", {
@@ -2116,12 +2234,13 @@ local function buildGUI()
 		end
 	end
 
-	local function makeTab(name, iconName, order)
+	local function makeTab(name, iconName, order, parent)
+		parent = parent or TabBox
 		local b = New("TextButton", {
 			Size = UDim2.new(1, 0, 0, 62), BackgroundColor3 = Theme.Element,
 			BackgroundTransparency = 1, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
 			LayoutOrder = order, Active = true,
-		}, TabBox)
+		}, parent)
 		Corner(b, 8)
 		local ind = New("Frame", {
 			Name = "Ind", Size = UDim2.fromOffset(4, 36), Position = UDim2.new(0, 0, 0.5, -18),
@@ -2154,10 +2273,15 @@ local function buildGUI()
 	makeTab("Character", "character", 1)
 	makeTab("AimParts", "aim_parts", 2)
 	makeTab("Whitelist", "whitelist", 3)
-	makeTab("Settings", "settings", 4)
-	makeTab("Config", "config", 5)
+	makeTab("Settings", "settings", 1, BottomTabBox)
+	makeTab("Config", "config", 2, BottomTabBox)
+
+	CollapseBtn.Activated:Connect(function()
+		setSidebarCollapsed(not sidebarCollapsed, false)
+	end)
 
 	local pCL = makePage("Character")
+
 	local pAP = makePage("AimParts")
 	local pWL = makePage("Whitelist")
 	local pST = makePage("Settings")
@@ -2199,9 +2323,22 @@ local function buildGUI()
 		return body
 	end
 
-	local function Toggle(parent, text, getter, setter)
+	local function Toggle(parent, text, getter, setter, iconName)
 		local row = New("Frame", {Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1}, parent)
-		Label(row, text, 13, Theme.Text).Size = UDim2.new(1, -58, 1, 0)
+		local textX = 0
+		if iconName then
+			local asset = getIcon(iconName)
+			if asset then
+				local ic = New("ImageLabel", {
+					Size = UDim2.fromOffset(22, 22), Position = UDim2.fromOffset(0, 5),
+					BackgroundTransparency = 1, Image = asset, ImageColor3 = Theme.SubText,
+					ScaleType = Enum.ScaleType.Fit, ResampleMode = Enum.ResamplerMode.Default,
+				}, row)
+				textX = 28
+			end
+		end
+		Label(row, text, 13, Theme.Text).Position = UDim2.fromOffset(textX, 0)
+		row:FindFirstChildOfClass("TextLabel").Size = UDim2.new(1, -58 - textX, 1, 0)
 		local btn = New("TextButton", {
 			Size = UDim2.fromOffset(44, 24), Position = UDim2.new(1, -44, 0.5, -12),
 			BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
@@ -2541,7 +2678,21 @@ local function buildGUI()
 		Slider(cTime, "Click Duration (mouse)", 0, 4, 2, function() return Config.MouseClickLockDuration end, function(v) Config.MouseClickLockDuration = v end)
 
 		local cLK = Card(pST.R, "Lock Keys", "bind")
-		Toggle(cLK, "Use Mouse Button 1", function() return Config.UseMouseButton1 end, function(v) Config.UseMouseButton1 = v end)
+		Toggle(cLK, "Use Mouse Button 1", function() return Config.UseMouseButton1 end, function(v) Config.UseMouseButton1 = v end, "mouse")
+		Toggle(cLK, "Use Mouse Button 2", function() return Config.UseMouseButton2 end, function(v) Config.UseMouseButton2 = v end, "mouse")
+
+		Bind(cLK, "Add Key", function() return Config.AddKey end, function(v)
+			Config.AddKey = v
+			if v and v ~= Enum.KeyCode.Unknown then
+				local exists = false
+				for _, existing in ipairs(Config.LockKeys) do
+					if existing == v then exists = true break end
+				end
+				if not exists then
+					table.insert(Config.LockKeys, v)
+				end
+			end
+		end)
 
 		local keyRow = New("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1}, cLK)
 		New("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, keyRow)
