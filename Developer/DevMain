@@ -2121,6 +2121,8 @@ local function buildGUI()
 	local sidebarCollapsed = false
 	local expandedMainSize = UDim2.fromOffset(860, 560)
 	local collapsedMainSize = UDim2.fromOffset(720, 560)
+	local expandedMainPosition = UDim2.new(0.5, -430, 0.5, -280)
+	local collapsedMainPosition = UDim2.new(0.5, -360, 0.5, -280)
 
 	local function setSidebarCollapsed(collapsed, instant)
 		sidebarCollapsed = collapsed
@@ -2128,18 +2130,19 @@ local function buildGUI()
 		local sideWidth = collapsed and 64 or 200
 		local mainSize = collapsed and collapsedMainSize or expandedMainSize
 
+		-- IMPORTANT: collapse/expand changes only Main.Size.
+		-- Main.Position is intentionally never modified here, so a dragged GUI
+		-- stays exactly where the user left it.
+
 		local info = instant and 0 or 0.22
 		if info <= 0 then
-			-- Preserve the GUI position chosen by the user. Collapsing/expanding
-			-- changes only the size/layout; it must never recenter or teleport Main.
 			Main.Size = mainSize
+			-- Never touch Main.Position while collapsing/expanding.
 			Side.Size = UDim2.fromOffset(sideWidth, 508)
 			sideStroke.Position = UDim2.new(1, -1, 0, 0)
 			Content.Position = UDim2.fromOffset(sideWidth, 52)
 			Content.Size = UDim2.new(1, -sideWidth, 1, -52)
 		else
-			-- Do not tween Main.Position here. The user's dragged position must be
-			-- preserved while the sidebar is collapsed/expanded.
 			Tween(Main, {
 				Size = mainSize,
 			}, info)
@@ -3241,6 +3244,36 @@ end
 local panicConfirmGui
 local panicConfirmBusy = false
 
+-- Panic/END feedback uses the same local Turbo sound cache as the premium runtime.
+local function playPanicSound(fileName, fallback, volume)
+	local asset
+	local function getAsset(name)
+		local result
+		pcall(function()
+			local path = "Turbo/Sounds/" .. name
+			if type(isfile) ~= "function" or not isfile(path) then return end
+			if type(getcustomasset) == "function" then
+				result = getcustomasset(path)
+			elseif type(getsynasset) == "function" then
+				result = getsynasset(path)
+			end
+		end)
+		return result
+	end
+
+	asset = getAsset(fileName)
+	if not asset and fallback then asset = getAsset(fallback) end
+	if not asset then return end
+
+	local sound = Instance.new("Sound")
+	sound.Name = "TurboPanicSound"
+	sound.SoundId = asset
+	sound.Volume = volume or 0.28
+	sound.Parent = game:GetService("SoundService")
+	sound:Play()
+	game:GetService("Debris"):AddItem(sound, 3)
+end
+
 local function doPanic()
 	turboPanicked = true
 	lockEnabled = false
@@ -3393,7 +3426,14 @@ local function buildPanicConfirm()
 	buttonFX(cancel, Color3.fromRGB(27, 28, 35), Color3.fromRGB(38, 39, 48))
 	buttonFX(confirm, Color3.fromRGB(218, 54, 70), Color3.fromRGB(236, 66, 83))
 
+	cancel.MouseEnter:Connect(function()
+		playPanicSound("hover.ogg", "click.ogg", 0.16)
+	end)
+	confirm.MouseEnter:Connect(function()
+		playPanicSound("hover.ogg", "click.ogg", 0.16)
+	end)
 	cancel.Activated:Connect(function()
+		playPanicSound("click.ogg", "select.ogg", 0.28)
 		if panicConfirmBusy then return end
 		panicConfirmGui.Enabled = false
 		clearFocus()
@@ -3401,6 +3441,7 @@ local function buildPanicConfirm()
 
 	confirm.Activated:Connect(function()
 		if panicConfirmBusy then return end
+		playPanicSound("click.ogg", "select.ogg", 0.32)
 		panicConfirmBusy = true
 		panicConfirmGui.Enabled = false
 		doPanic()
@@ -3411,6 +3452,9 @@ end
 
 local function showPanicConfirm()
 	if turboPanicked or panicConfirmBusy then return end
+
+	-- END key feedback. The confirm/cancel buttons have their own click/hover sounds.
+	playPanicSound("click.ogg", "select.ogg", 0.28)
 
 	local gui = buildPanicConfirm()
 	if not gui then return end
@@ -3910,16 +3954,6 @@ do
 	-- ----------------------------------------------------------
 
 	PremiumUIS.InputBegan:Connect(function(input, processed)
-		-- END must still receive its premium feedback sound even when Roblox
-		-- marks the keyboard input as processed. The main input handler already
-		-- handles the Panic confirmation itself.
-		if input.KeyCode == Config.PanicKey then
-			if ScreenGui and ScreenGui.Parent then
-				premiumPlay("click", "click.ogg", "select.ogg", 0.28)
-			end
-			return
-		end
-
 		if processed then return end
 		if not ScreenGui or not ScreenGui.Parent or not ScreenGui.Enabled then return end
 
