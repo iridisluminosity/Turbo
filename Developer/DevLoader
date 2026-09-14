@@ -1,12 +1,10 @@
--- Turbo Loader / Asset Bootstrapper + Loading Screen
--- Execute this script instead of Main.
--- It downloads Main directly into memory and executes it without creating Main.lua.
--- Loading screen stays in Loader; Premium interaction effects live in DevMain.
--- Includes lightweight integrity and anti-tamper checks.
+--[[ Turbo Loader / Asset Bootstrapper
+     The Loader ONLY prepares and validates assets, then executes Main.
+     Premium animations, sounds, button FX, tab FX and menu FX live in Main.
+     Main is never written to disk.
+]]
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local SoundService = game:GetService("SoundService")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
@@ -26,7 +24,7 @@ local DIRS = {
 
 for _, folder in ipairs(DIRS) do
     pcall(function()
-        if not isfolder(folder) then
+        if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder(folder) then
             makefolder(folder)
         end
     end)
@@ -39,390 +37,206 @@ local function httpGet(url)
     return ok and result or nil
 end
 
-local function isFile(path)
+local function fileExists(path)
     local ok, result = pcall(function()
-        return isfile(path)
+        return type(isfile) == "function" and isfile(path)
     end)
-    return ok and result
+    return ok and result == true
 end
 
-local function writeSafe(path, data)
-    pcall(function()
+local function writeFileSafe(path, data)
+    if type(writefile) ~= "function" then
+        return false
+    end
+
+    local ok = pcall(function()
         writefile(path, data)
     end)
+
+    return ok and fileExists(path)
 end
 
-local function readSafe(path)
-    local ok, result = pcall(function()
-        return readfile(path)
-    end)
-    return ok and result or nil
-end
-
-local function customAsset(path)
-    if getcustomasset then
-        local ok, result = pcall(function()
-            return getcustomasset(path)
-        end)
-        if ok then return result end
-    end
-
-    if getsynasset then
-        local ok, result = pcall(function()
-            return getsynasset(path)
-        end)
-        if ok then return result end
-    end
-end
-
-local function cache(url, path)
-    if not isFile(path) then
-        local data = httpGet(url)
-        if not data then return nil end
-        writeSafe(path, data)
-    end
-
-    return customAsset(path)
-end
-
-local Sounds = {}
-
-local function makeSound(name, fileName, volume)
-    local path = ROOT .. "/Sounds/" .. fileName
-    local asset = cache(BASE .. "Sounds/" .. fileName, path)
-
-    if not asset then
-        return nil
-    end
-
-    local sound = Instance.new("Sound")
-    sound.Name = "TurboPremium_" .. name
-    sound.SoundId = asset
-    sound.Volume = volume or 0.35
-    sound.Parent = SoundService
-
-    return sound
-end
-
-local function getSound(name, preferred, fallback)
-    if Sounds[name] then
-        return Sounds[name]
-    end
-
-    local sound = makeSound(name, preferred, 0.32)
-
-    if not sound and fallback then
-        sound = makeSound(name, fallback, 0.25)
-    end
-
-    Sounds[name] = sound
-    return sound
-end
-
-local function playSound(name, preferred, fallback, volume)
-    local sound = getSound(name, preferred, fallback)
-
-    if not sound then
-        return
-    end
-
-    sound.Volume = volume or sound.Volume
-    sound.TimePosition = 0
+local function assetFromFile(path)
+    local asset = nil
 
     pcall(function()
-        sound:Play()
+        if type(getcustomasset) == "function" then
+            asset = getcustomasset(path)
+        elseif type(getsynasset) == "function" then
+            asset = getsynasset(path)
+        end
     end)
+
+    return type(asset) == "string" and #asset > 0 and asset or nil
 end
 
--- =========================================================
--- PREMIUM LOADING SCREEN
--- =========================================================
-
-local oldLoader = PlayerGui:FindFirstChild("TurboPremiumLoader")
-
-if oldLoader then
-    oldLoader:Destroy()
-end
-
-local Screen = Instance.new("ScreenGui")
-Screen.Name = "TurboPremiumLoader"
-Screen.IgnoreGuiInset = true
-Screen.ResetOnSpawn = false
-Screen.DisplayOrder = 2147483646
-Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-Screen.Parent = PlayerGui
-
-local BG = Instance.new("Frame")
-BG.Size = UDim2.fromScale(1, 1)
-BG.BackgroundColor3 = Color3.fromRGB(7, 8, 11)
-BG.BorderSizePixel = 0
-BG.Parent = Screen
-
-local bgGradient = Instance.new("UIGradient")
-bgGradient.Rotation = 90
-bgGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(5, 6, 8)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(12, 13, 18)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 6, 8)),
-})
-bgGradient.Parent = BG
-
-local accent = Color3.fromRGB(225, 55, 72)
-
-local center = Instance.new("Frame")
-center.AnchorPoint = Vector2.new(0.5, 0.5)
-center.Position = UDim2.fromScale(0.5, 0.47)
-center.Size = UDim2.fromOffset(450, 380)
-center.BackgroundTransparency = 1
-center.Parent = BG
-
-local glow = Instance.new("ImageLabel")
-glow.AnchorPoint = Vector2.new(0.5, 0.5)
-glow.Position = UDim2.fromScale(0.5, 0.36)
-glow.Size = UDim2.fromOffset(270, 270)
-glow.BackgroundTransparency = 1
-glow.Image = "rbxassetid://5028857084"
-glow.ImageColor3 = accent
-glow.ImageTransparency = 0.9
-glow.Parent = center
-
-task.spawn(function()
-    while Screen.Parent do
-        TweenService:Create(glow, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-            Size = UDim2.fromOffset(320, 320),
-            ImageTransparency = 0.95
-        }):Play()
-
-        task.wait(1.5)
-
-        TweenService:Create(glow, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-            Size = UDim2.fromOffset(270, 270),
-            ImageTransparency = 0.9
-        }):Play()
-
-        task.wait(1.5)
-    end
-end)
-
-local animation = Instance.new("ImageLabel")
-animation.AnchorPoint = Vector2.new(0.5, 0.5)
-animation.Position = UDim2.fromScale(0.5, 0.36)
-animation.Size = UDim2.fromOffset(150, 150)
-animation.BackgroundTransparency = 1
-animation.ImageTransparency = 1
-animation.Parent = center
-
-local frames = {
-    "BoostLoading.png",
-    "BoostLoading1.png",
-    "BoostLoading2.png",
-    "BoostLoading3.png",
-    "BoostLoading4.png",
-    "BoostLoading5.png",
-}
-
-local cachedFrames = {}
-
-for _, name in ipairs(frames) do
-    local path = ROOT .. "/Images/Animations/" .. name
-
-    local asset = cache(
-        BASE .. "Images/Animations/LoadingAnimation/" .. name,
-        path
-    )
-
-    if asset then
-        table.insert(cachedFrames, asset)
-    end
-end
-
-if cachedFrames[1] then
-    animation.Image = cachedFrames[1]
-end
-
-TweenService:Create(
-    animation,
-    TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-    {ImageTransparency = 0}
-):Play()
-
-task.spawn(function()
-    local index = 1
-
-    while Screen.Parent and #cachedFrames > 0 do
-        animation.Image = cachedFrames[index]
-
-        index = index + 1
-
-        if index > #cachedFrames then
-            index = 1
+local function ensureAsset(url, path, label)
+    -- Existing file: validate it can be resolved as an asset.
+    if fileExists(path) then
+        local asset = assetFromFile(path)
+        if asset then
+            return true
         end
 
-        task.wait(0.11)
+        -- Broken/empty/unresolvable cache entry: replace it.
+        pcall(function()
+            if type(delfile) == "function" then
+                delfile(path)
+            end
+        end)
     end
-end)
 
-local title = Instance.new("TextLabel")
-title.AnchorPoint = Vector2.new(0.5, 0)
-title.Position = UDim2.fromScale(0.5, 0.50)
-title.Size = UDim2.fromOffset(430, 50)
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBlack
-title.Text = "TURBO"
-title.TextColor3 = Color3.fromRGB(245, 245, 248)
-title.TextSize = 36
-title.TextTransparency = 1
-title.Parent = center
+    -- Download with a small retry budget.
+    for attempt = 1, 3 do
+        local data = httpGet(url)
 
-local line = Instance.new("Frame")
-line.AnchorPoint = Vector2.new(0.5, 0)
-line.Position = UDim2.fromScale(0.5, 0.65)
-line.Size = UDim2.fromOffset(0, 2)
-line.BackgroundColor3 = accent
-line.BorderSizePixel = 0
-line.Parent = center
+        if type(data) == "string" and #data >= 20 then
+            if writeFileSafe(path, data) then
+                if assetFromFile(path) then
+                    print("[Turbo Loader] OK:", label)
+                    return true
+                end
+            end
+        end
 
-local subtitle = Instance.new("TextLabel")
-subtitle.AnchorPoint = Vector2.new(0.5, 0)
-subtitle.Position = UDim2.fromScale(0.5, 0.68)
-subtitle.Size = UDim2.fromOffset(430, 24)
-subtitle.BackgroundTransparency = 1
-subtitle.Font = Enum.Font.GothamMedium
-subtitle.Text = "PREMIUM CONTROL SYSTEM"
-subtitle.TextColor3 = Color3.fromRGB(145, 148, 158)
-subtitle.TextSize = 11
-subtitle.TextTransparency = 1
-subtitle.Parent = center
+        task.wait(0.15 * attempt)
+    end
 
-local status = Instance.new("TextLabel")
-status.AnchorPoint = Vector2.new(0.5, 0)
-status.Position = UDim2.fromScale(0.5, 0.76)
-status.Size = UDim2.fromOffset(430, 24)
-status.BackgroundTransparency = 1
-status.Font = Enum.Font.GothamBold
-status.Text = "CONNECTING"
-status.TextColor3 = accent
-status.TextSize = 11
-status.TextTransparency = 1
-status.Parent = center
-
-local percent = Instance.new("TextLabel")
-percent.AnchorPoint = Vector2.new(0.5, 0)
-percent.Position = UDim2.fromScale(0.5, 0.82)
-percent.Size = UDim2.fromOffset(430, 20)
-percent.BackgroundTransparency = 1
-percent.Font = Enum.Font.GothamMedium
-percent.Text = "0%"
-percent.TextColor3 = Color3.fromRGB(145, 148, 158)
-percent.TextSize = 10
-percent.TextTransparency = 1
-percent.Parent = center
-
-local progressBG = Instance.new("Frame")
-progressBG.AnchorPoint = Vector2.new(0.5, 0)
-progressBG.Position = UDim2.fromScale(0.5, 0.89)
-progressBG.Size = UDim2.fromOffset(340, 4)
-progressBG.BackgroundColor3 = Color3.fromRGB(28, 29, 35)
-progressBG.BorderSizePixel = 0
-progressBG.Parent = center
-
-local pc = Instance.new("UICorner")
-pc.CornerRadius = UDim.new(1, 0)
-pc.Parent = progressBG
-
-local progress = Instance.new("Frame")
-progress.Size = UDim2.fromScale(0, 1)
-progress.BackgroundColor3 = accent
-progress.BorderSizePixel = 0
-progress.Parent = progressBG
-
-local pc2 = Instance.new("UICorner")
-pc2.CornerRadius = UDim.new(1, 0)
-pc2.Parent = progress
-
-for _, obj in ipairs({title, subtitle, status, percent}) do
-    TweenService:Create(
-        obj,
-        TweenInfo.new(0.65, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-        {TextTransparency = 0}
-    ):Play()
+    warn("[Turbo Loader] FAILED:", label)
+    return false
 end
-
-TweenService:Create(
-    line,
-    TweenInfo.new(0.75, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-    {Size = UDim2.fromOffset(70, 2)}
-):Play()
-
-local function setProgress(value, text)
-    value = math.clamp(value, 0, 1)
-
-    percent.Text = tostring(math.floor(value * 100)) .. "%"
-    status.Text = text
-
-    TweenService:Create(
-        progress,
-        TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-        {Size = UDim2.fromScale(value, 1)}
-    ):Play()
-end
-
-setProgress(0.12, "CONNECTING")
-task.wait(0.08)
-
-setProgress(0.25, "PREPARING AUDIO")
-
-for _, pair in ipairs({
-    {"open", "gui_open.ogg", nil},
-    {"close", "gui_close.ogg", nil},
-    {"hover", "hover.ogg", nil},
-    {"click", "click.ogg", nil},
-    {"select", "select.ogg", nil},
-    {"lock", "lock.ogg", "select.ogg"},
-}) do
-    getSound(pair[1], pair[2], pair[3])
-end
-
-setProgress(0.46, "LOADING ANIMATION")
-task.wait(0.08)
-
-setProgress(0.60, "WARMING CACHE")
 
 -- =========================================================
--- REQUIRED ICON CACHE
--- Loader owns all asset downloads. Main only reads the cache.
+-- ASSET MANIFEST
 -- =========================================================
 
-local requiredIcons = {
-    "aim.png", "always.png", "behind.png", "bind.png", "block.png",
-    "body_parts.png", "character.png", "config.png", "console.png", "contacts.png",
-    "crosshair.png", "dashboard.png", "deadzone.png", "delay.png", "distance.png",
-    "eye.png", "file.png", "file_config.png", "hidden.png", "hourglass.png",
-    "info.png", "keyboard.png", "methods.png", "mouse.png", "panic.png",
-    "prediction.png", "priority.png", "shield.png", "smooth.png", "target.png",
+local requiredSounds = {
+    {"gui_open.ogg", "gui_open.ogg"},
+    {"gui_close.ogg", "gui_close.ogg"},
+    {"hover.ogg", "hover.ogg"},
+    {"click.ogg", "click.ogg"},
+    {"select.ogg", "select.ogg"},
+    {"lock.ogg", "lock.ogg"},
+
 }
 
-for _, fileName in ipairs(requiredIcons) do
-    local path = ROOT .. "/Images/Icons/" .. fileName
-    local asset = cache(BASE .. "Images/" .. fileName, path)
-    if not asset then
-        warn("[Turbo] Failed to cache icon:", fileName)
+local requiredIcons = {
+    {"aim.png", "aim.png"},
+    {"always.png", "always.png"},
+    {"behind.png", "behind.png"},
+    {"bind.png", "bind.png"},
+    {"block.png", "block.png"},
+    {"body_parts.png", "body_parts.png"},
+    {"character.png", "character.png"},
+    {"config.png", "config.png"},
+    {"console.png", "console.png"},
+    {"contacts.png", "contacts.png"},
+    {"crosshair.png", "crosshair.png"},
+    {"dashboard.png", "dashboard.png"},
+    {"deadzone.png", "deadzone.png"},
+    {"delay.png", "delay.png"},
+    {"distance.png", "distance.png"},
+    {"eye.png", "eye.png"},
+    {"file.png", "file.png"},
+    {"file_config.png", "file_config.png"},
+    {"hidden.png", "hidden.png"},
+    {"hourglass.png", "hourglass.png"},
+    {"info.png", "info.png"},
+    {"keyboard.png", "keyboard.png"},
+    {"methods.png", "methods.png"},
+    {"mouse.png", "mouse.png"},
+    {"panic.png", "panic.png"},
+    {"prediction.png", "prediction.png"},
+    {"priority.png", "priority.png"},
+    {"shield.png", "shield.png"},
+    {"smooth.png", "smooth.png"},
+    {"target.png", "target.png"},
+
+}
+
+local requiredAnimationFrames = {
+    {"BoostLoading.png", "BoostLoading.png"},
+    {"BoostLoading1.png", "BoostLoading1.png"},
+    {"BoostLoading2.png", "BoostLoading2.png"},
+    {"BoostLoading3.png", "BoostLoading3.png"},
+    {"BoostLoading4.png", "BoostLoading4.png"},
+    {"BoostLoading5.png", "BoostLoading5.png"},
+
+}
+
+local totalAssets = #requiredSounds + #requiredIcons + #requiredAnimationFrames
+local readyAssets = 0
+local failedAssets = {}
+
+local function prepareList(list, rawFolder, cacheFolder, kind)
+    for _, item in ipairs(list) do
+        local fileName = item[1]
+        local label = item[2]
+        local ok = ensureAsset(
+            rawFolder .. fileName,
+            cacheFolder .. fileName,
+            kind .. "/" .. label
+        )
+
+        if ok then
+            readyAssets += 1
+        else
+            table.insert(failedAssets, kind .. "/" .. label)
+        end
     end
 end
 
+prepareList(
+    requiredSounds,
+    BASE .. "Sounds/",
+    ROOT .. "/Sounds/",
+    "Sound"
+)
+
+prepareList(
+    requiredIcons,
+    BASE .. "Images/",
+    ROOT .. "/Images/Icons/",
+    "Icon"
+)
+
+prepareList(
+    requiredAnimationFrames,
+    BASE .. "Images/Animations/LoadingAnimation/",
+    ROOT .. "/Images/Animations/",
+    "Animation"
+)
+
+if #failedAssets > 0 then
+    warn("[Turbo Loader] Asset validation failed. Main will NOT execute.")
+    for _, item in ipairs(failedAssets) do
+        warn("[Turbo Loader] Missing:", item)
+    end
+    return
+end
+
+print(string.format(
+    "[Turbo Loader] Assets ready: %d/%d",
+    readyAssets,
+    totalAssets
+))
+
 -- =========================================================
--- PROTECTED MAIN: MEMORY-ONLY
--- Main.lua is NEVER written to disk and there is no local fallback.
+-- MAIN FETCH + INTEGRITY CHECK
 -- =========================================================
 
 local function fnv1a(data)
     local h = 2166136261
     local bxor = bit32 and bit32.bxor
-    if type(bxor) ~= "function" then return nil end
+    if type(bxor) ~= "function" then
+        return nil
+    end
+
     for i = 1, #data do
         h = bxor(h, string.byte(data, i))
         h = (h * 16777619) % 4294967296
     end
+
     return string.format("%08x", h)
 end
 
@@ -433,169 +247,34 @@ local function saneMain(data)
         and not data:find("\0", 1, true)
 end
 
-local function readIntegrityManifest()
-    local manifest = httpGet(BASE .. "Configs/integrity.txt")
-    if not manifest then return nil end
-    local expected = manifest:match("MAIN%s*=%s*([%x]+)")
-    return expected and string.lower(expected) or nil
-end
-
 local mainCode = httpGet(MAIN_URL)
-local mainIntegrityExpected = readIntegrityManifest()
-local mainIntegrityActual = mainCode and fnv1a(mainCode) or nil
+local manifest = httpGet(BASE .. "Configs/integrity.txt")
+local expected = manifest and manifest:match("MAIN%s*=%s*([%x]+)")
+local actual = mainCode and fnv1a(mainCode) or nil
 
 if not saneMain(mainCode) then
-    mainCode = nil
-    warn("[Turbo] Main rejected by integrity sanity check.")
-elseif mainIntegrityExpected and mainIntegrityActual ~= mainIntegrityExpected then
-    warn("[Turbo] Main integrity mismatch; execution aborted.")
-    mainCode = nil
-end
-
--- Keep the source only in memory. Do not write Main to Turbo/Main.lua.
--- Asset caching below is intentionally limited to sounds/images.
-
-
-setProgress(0.72, "BUILDING UI")
-task.wait(0.08)
-
--- =========================================================
--- MAIN EXECUTION
--- IMPORTANT: Main is executed completely unmodified.
--- The premium layer is attached only after Main creates Turbo.
--- =========================================================
-
--- =========================================================
--- EXECUTE CURRENT MAIN
--- =========================================================
-
-setProgress(0.90, "SYNCING CONTROLS")
-task.wait(0.08)
-
-setProgress(1, "READY")
-task.wait(0.20)
-
-local mainRunOK = false
-local mainRunError = nil
-local mainCompileError = nil
-
-if mainCode then
-    -- Basic runtime anti-tamper: fail closed if the execution primitives were replaced.
-    local primitivesOK = type(loadstring) == "function"
-        and type(pcall) == "function"
-        and type(rawget) == "function"
-        and type(task) == "table"
-        and type(task.wait) == "function"
-
-    if not primitivesOK then
-        mainRunError = "Runtime integrity check failed."
-        warn("[Turbo] Runtime integrity check failed.")
-        mainCode = nil
-    end
-end
-
-if mainCode then
-    local fn, compileError = loadstring(mainCode)
-
-    if not fn then
-        mainCompileError = compileError
-        warn("[Turbo] Main compile error:", compileError)
-    else
-        -- IMPORTANT: run Main synchronously. The previous versions started
-        -- Main in task.spawn and then tried to find its GUI from a second
-        -- thread. If Main failed or was still initializing, the premium
-        -- layer could finish with only the loader visible.
-        local ok, err = pcall(fn)
-        mainRunOK = ok
-        mainRunError = err
-
-        if not ok then
-            warn("[Turbo] Main runtime error:", err)
-        end
-    end
-else
-    warn("[Turbo] Could not load Main.")
-end
-
--- =========================================================
--- WAIT FOR TURBO GUI
--- =========================================================
-
-local TurboGui
-
-for _ = 1, 60 do
-    TurboGui = PlayerGui:FindFirstChild("Turbo")
-    if TurboGui then break end
-    task.wait(0.05)
-end
-
-if not TurboGui then
-    warn("[Turbo] Main finished but ScreenGui 'Turbo' was not created.")
-    if mainCompileError then
-        warn("[Turbo] Compile error:", mainCompileError)
-    elseif mainRunError then
-        warn("[Turbo] Runtime error:", mainRunError)
-    end
-end
-
-
--- =========================================================
--- LOADER FINISHED
--- Loading screen is owned by Loader. Premium runtime is owned by Main.
--- =========================================================
-
-if not mainRunOK then
-    local errorText = mainCompileError and "MAIN COMPILE ERROR"
-        or mainRunError and "MAIN RUNTIME ERROR"
-        or "TURBO GUI NOT CREATED"
-
-    local statusLabel = Screen and Screen:FindFirstChild("Status", true)
-    if statusLabel and statusLabel:IsA("TextLabel") then
-        statusLabel.Text = errorText
-        statusLabel.TextColor3 = Color3.fromRGB(220, 70, 85)
-    end
-
-    warn("[Turbo] Loader stopped:", errorText)
+    warn("[Turbo Loader] Main rejected by sanity check.")
     return
 end
 
--- Main created the Turbo GUI successfully. Fade out and remove only Loader.
-task.wait(0.35)
-
-pcall(function()
-    playSound("open", "gui_open.ogg", "click.ogg", 0.36)
-end)
-
-for _, obj in ipairs(Screen:GetDescendants()) do
-    if obj:IsA("TextLabel") then
-        TweenService:Create(
-            obj,
-            TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-            {TextTransparency = 1}
-        ):Play()
-    elseif obj:IsA("ImageLabel") then
-        TweenService:Create(
-            obj,
-            TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-            {ImageTransparency = 1}
-        ):Play()
-    elseif obj:IsA("Frame") then
-        TweenService:Create(
-            obj,
-            TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-            {BackgroundTransparency = 1}
-        ):Play()
-    end
+if expected and actual ~= string.lower(expected) then
+    warn("[Turbo Loader] Main integrity mismatch. Execution aborted.")
+    return
 end
 
-task.wait(0.5)
+-- Main stays memory-only.
+local fn, compileError = loadstring(mainCode)
+mainCode = nil
 
-if Screen then
-    Screen:Destroy()
+if not fn then
+    warn("[Turbo Loader] Main compile error:", compileError)
+    return
 end
 
-print("[Turbo] Loader initialized.")
-print("[Turbo] Loading Screen: ON")
-print("[Turbo] Asset Cache: ON")
-print("[Turbo] Main: EXECUTED")
-print("[Turbo] Premium Runtime: OWNED BY MAIN")
+local ok, err = pcall(fn)
+if not ok then
+    warn("[Turbo Loader] Main runtime error:", err)
+    return
+end
+
+print("[Turbo Loader] Main executed. Premium runtime is owned by Main.")
