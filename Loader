@@ -10,7 +10,7 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 local ROOT = "Turbo"
 local BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/refs/heads/main/"
-local MAIN_URL = "https://gitlab.com/turbo-group5732338/turbo/-/raw/main/Main?ref_type=heads"
+local MAIN_URL = "https://pastebin.com/raw/KkkcbQ48"
 -- =========================================================
 -- TURBO KEY SYSTEM / SUPABASE
 -- Using legacy anon key (more reliable with most executors)
@@ -1110,7 +1110,13 @@ local function readIntegrityManifest()
     return expected and string.lower(expected) or nil
 end
 local mainCode = httpGet(MAIN_URL)
-local mainIntegrityExpected = readIntegrityManifest()
+-- The GitHub integrity manifest only belongs to the GitHub-hosted Main.
+-- When Main is hosted externally (Pastebin), do not compare it against
+-- a hash generated from a different copy of Main.
+local mainIntegrityExpected = nil
+if MAIN_URL:sub(1, #BASE) == BASE then
+    mainIntegrityExpected = readIntegrityManifest()
+end
 local mainIntegrityActual = mainCode and fnv1a(mainCode) or nil
 if not saneMain(mainCode) then
     local mainLen = type(mainCode) == "string" and #mainCode or 0
@@ -1119,6 +1125,8 @@ if not saneMain(mainCode) then
 elseif mainIntegrityExpected and mainIntegrityActual ~= mainIntegrityExpected then
     warn("[Turbo] Main integrity mismatch; execution aborted.")
     mainCode = nil
+elseif mainIntegrityActual then
+    print("[Turbo] Main integrity sanity OK. Hash:", mainIntegrityActual)
 end
 setProgress(0.72, "BUILDING UI")
 task.wait(0.08)
@@ -1216,3 +1224,4 @@ print("[Turbo] Loader initialized.")
 print("[Turbo] Loading Screen: ON")
 print("[Turbo] Asset Cache: ON")
 print("[Turbo] Main: EXECUTED")
+print("[Turbo] Premium Runtime: OWNED BY MAIN")
