@@ -1,19 +1,190 @@
--- Turbo Premium Loader / Runtime UI Patch
+-- Turbo Loader / Asset Bootstrapper + Loading Screen
 -- Execute this script instead of Main.
 -- It downloads Main directly into memory and executes it without creating Main.lua.
--- Panic confirmation is controlled by the loader/Main bridge.
+-- Loading screen stays in Loader; Premium interaction effects live in DevMain.
 -- Includes lightweight integrity and anti-tamper checks.
-
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
-
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
-
 local ROOT = "Turbo"
-local RAW = "https://raw.githubusercontent.com/iridisluminosity/Turbo/main/"
-
+local BASE = "https://raw.githubusercontent.com/iridisluminosity/Turbo/refs/heads/main/"
+local MAIN_URL = "https://gitlab.com/turbo-group5732338/turbo/-/raw/main/Main?ref_type=heads"
+-- =========================================================
+-- TURBO KEY SYSTEM / SUPABASE
+-- Using legacy anon key (more reliable with most executors)
+-- =========================================================
+local HttpService = game:GetService("HttpService")
+local VERIFY_KEY_URL = "https://tofiehnoldjdeaxfuucq.supabase.co/functions/v1/verify-key"
+local SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvZmllaG5vbGRqZGVheGZ1dWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzNTY2MTQsImV4cCI6MjEwNDkzMjYxNH0.kCysoyyfAhxjTDxfVU8ls22kO246bPcpQPW1PZr_VaM"
+local function getGlobalFunction(names)
+    local environments = {}
+    pcall(function()
+        if type(getgenv) == "function" then
+            local env = getgenv()
+            if type(env) == "table" then
+                table.insert(environments, env)
+            end
+        end
+    end)
+    table.insert(environments, _G)
+    for _, env in ipairs(environments) do
+        for _, name in ipairs(names) do
+            local ok, value = pcall(function()
+                return env[name]
+            end)
+            if ok and type(value) == "function" then
+                return value
+            end
+        end
+    end
+    return nil
+end
+local function getExecutorName()
+    local identify = getGlobalFunction({"identifyexecutor", "getexecutorname"})
+    if identify then
+        local ok, name = pcall(identify)
+        if ok and name then
+            name = tostring(name):gsub("^%s+", ""):gsub("%s+$", "")
+            if name ~= "" then
+                return name
+            end
+        end
+    end
+    return "Unknown"
+end
+local function getHWID()
+    local getHardwareId = getGlobalFunction({"gethwid", "getHWID", "get_hwid"})
+    if not getHardwareId then
+        return nil, "HWID API was not found in this executor."
+    end
+    local ok, hwid = pcall(getHardwareId)
+    if not ok or hwid == nil then
+        return nil, "The executor failed to provide a HWID."
+    end
+    hwid = tostring(hwid):gsub("^%s+", ""):gsub("%s+$", "")
+    if hwid == "" then
+        return nil, "The executor returned an empty HWID."
+    end
+    return hwid
+end
+local function collectRequestFunctions()
+    local functions = {}
+    local seen = {}
+    local function addFunction(name, fn)
+        if type(fn) ~= "function" then
+            return
+        end
+        if seen[fn] then
+            return
+        end
+        seen[fn] = true
+        table.insert(functions, {
+            name = name,
+            fn = fn,
+        })
+    end
+    pcall(function()
+        if type(getgenv) == "function" then
+            local env = getgenv()
+            if type(env) == "table" then
+                addFunction("getgenv.request", env.request)
+                addFunction("getgenv.http_request", env.http_request)
+            end
+        end
+    end)
+    pcall(function()
+        addFunction("request", request)
+    end)
+    pcall(function()
+        addFunction("http_request", http_request)
+    end)
+    pcall(function()
+        if type(syn) == "table" then
+            addFunction("syn.request", syn.request)
+        end
+    end)
+    return functions
+end
+local function getResponseStatus(result)
+    if type(result) ~= "table" then
+        return nil
+    end
+    return tonumber(
+        result.StatusCode
+        or result.statusCode
+        or result.Status
+        or result.status
+    )
+end
+local function getResponseBody(result)
+    if type(result) ~= "table" then
+        return nil
+    end
+    local body = result.Body or result.body
+    if body == nil then
+        return nil
+    end
+    return tostring(body)
+end
+local function looksLikeInvalidGatewayKey(statusCode, responseBody)
+    if statusCode ~= 401 then
+        return false
+    end
+    local body = string.lower(responseBody or "")
+    return body:find("unauthorized_invalid_api_key", 1, true) ~= nil
+        or body:find("bad_checksum", 1, true) ~= nil
+        or body:find("invalid api key", 1, true) ~= nil
+end
+local function requestVerifyKey(key, hwid, executor)
+    local requestFunctions = collectRequestFunctions()
+    if #requestFunctions == 0 then
+        return nil, "HTTP request API was not found in this executor."
+    end
+    local body = HttpService:JSONEncode({
+        key = key,
+        hwid = hwid,
+        executor = executor,
+    })
+    local lastError = nil
+    for _, requestInfo in ipairs(requestFunctions) do
+        local ok, result = pcall(function()
+            return requestInfo.fn({
+                Url = VERIFY_KEY_URL,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                    ["apikey"] = SUPABASE_PUBLISHABLE_KEY,
+                    ["Authorization"] = "Bearer " .. SUPABASE_PUBLISHABLE_KEY,
+                },
+                Body = body,
+            })
+        end)
+        if ok and result then
+            local statusCode = getResponseStatus(result)
+            local responseBody = getResponseBody(result)
+            if type(responseBody) == "string" and responseBody ~= "" then
+                if not looksLikeInvalidGatewayKey(statusCode, responseBody) then
+                    local decodeOK, decoded = pcall(function()
+                        return HttpService:JSONDecode(responseBody)
+                    end)
+                    if decodeOK and type(decoded) == "table" then
+                        return decoded
+                    end
+                    lastError = "The key server returned an invalid response."
+                else
+                    lastError = "The executor's HTTP bridge was rejected by the Supabase API key gateway."
+                end
+            else
+                lastError = "The key server returned an empty response."
+            end
+        else
+            lastError = "HTTP request failed through " .. requestInfo.name .. "."
+        end
+    end
+    return nil, lastError or "Could not connect to the key server."
+end
 local DIRS = {
     ROOT,
     ROOT .. "/Sounds",
@@ -21,8 +192,8 @@ local DIRS = {
     ROOT .. "/Images/Icons",
     ROOT .. "/Images/Animations",
     ROOT .. "/Configs",
+    ROOT .. "/Config",
 }
-
 for _, folder in ipairs(DIRS) do
     pcall(function()
         if not isfolder(folder) then
@@ -30,34 +201,54 @@ for _, folder in ipairs(DIRS) do
         end
     end)
 end
-
 local function httpGet(url)
     local ok, result = pcall(function()
         return game:HttpGet(url)
     end)
-    return ok and result or nil
-end
+    if ok and type(result) == "string" and #result > 0 then
+        return result
+    end
 
+    local requestFn = nil
+    pcall(function()
+        requestFn = (syn and syn.request) or request or http_request
+    end)
+
+    if type(requestFn) == "function" then
+        local rok, response = pcall(function()
+            return requestFn({
+                Url = url,
+                Method = "GET",
+            })
+        end)
+        if rok and type(response) == "table" then
+            local body = response.Body or response.body
+            if type(body) == "string" and #body > 0 then
+                return body
+            end
+        end
+    end
+
+    warn("[Turbo] HTTP GET failed:", tostring(url))
+    return nil
+end
 local function isFile(path)
     local ok, result = pcall(function()
         return isfile(path)
     end)
     return ok and result
 end
-
 local function writeSafe(path, data)
     pcall(function()
         writefile(path, data)
     end)
 end
-
 local function readSafe(path)
     local ok, result = pcall(function()
         return readfile(path)
     end)
     return ok and result or nil
 end
-
 local function customAsset(path)
     if getcustomasset then
         local ok, result = pcall(function()
@@ -65,7 +256,6 @@ local function customAsset(path)
         end)
         if ok then return result end
     end
-
     if getsynasset then
         local ok, result = pcall(function()
             return getsynasset(path)
@@ -73,76 +263,57 @@ local function customAsset(path)
         if ok then return result end
     end
 end
-
 local function cache(url, path)
     if not isFile(path) then
         local data = httpGet(url)
         if not data then return nil end
         writeSafe(path, data)
     end
-
     return customAsset(path)
 end
-
 local Sounds = {}
-
 local function makeSound(name, fileName, volume)
     local path = ROOT .. "/Sounds/" .. fileName
-    local asset = cache(RAW .. "Sounds/" .. fileName, path)
-
+    local asset = cache(BASE .. "Sounds/" .. fileName, path)
     if not asset then
         return nil
     end
-
     local sound = Instance.new("Sound")
     sound.Name = "TurboPremium_" .. name
     sound.SoundId = asset
     sound.Volume = volume or 0.35
     sound.Parent = SoundService
-
     return sound
 end
-
 local function getSound(name, preferred, fallback)
     if Sounds[name] then
         return Sounds[name]
     end
-
     local sound = makeSound(name, preferred, 0.32)
-
     if not sound and fallback then
         sound = makeSound(name, fallback, 0.25)
     end
-
     Sounds[name] = sound
     return sound
 end
-
 local function playSound(name, preferred, fallback, volume)
     local sound = getSound(name, preferred, fallback)
-
     if not sound then
         return
     end
-
     sound.Volume = volume or sound.Volume
     sound.TimePosition = 0
-
     pcall(function()
         sound:Play()
     end)
 end
-
 -- =========================================================
 -- PREMIUM LOADING SCREEN
 -- =========================================================
-
 local oldLoader = PlayerGui:FindFirstChild("TurboPremiumLoader")
-
 if oldLoader then
     oldLoader:Destroy()
 end
-
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "TurboPremiumLoader"
 Screen.IgnoreGuiInset = true
@@ -150,13 +321,11 @@ Screen.ResetOnSpawn = false
 Screen.DisplayOrder = 2147483646
 Screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Screen.Parent = PlayerGui
-
 local BG = Instance.new("Frame")
 BG.Size = UDim2.fromScale(1, 1)
-BG.BackgroundColor3 = Color3.fromRGB(7, 8, 11)
+BG.BackgroundColor3 = Color3.fromRGB(7,.8, 11)
 BG.BorderSizePixel = 0
 BG.Parent = Screen
-
 local bgGradient = Instance.new("UIGradient")
 bgGradient.Rotation = 90
 bgGradient.Color = ColorSequence.new({
@@ -165,16 +334,13 @@ bgGradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 6, 8)),
 })
 bgGradient.Parent = BG
-
 local accent = Color3.fromRGB(225, 55, 72)
-
 local center = Instance.new("Frame")
 center.AnchorPoint = Vector2.new(0.5, 0.5)
 center.Position = UDim2.fromScale(0.5, 0.47)
 center.Size = UDim2.fromOffset(450, 380)
 center.BackgroundTransparency = 1
 center.Parent = BG
-
 local glow = Instance.new("ImageLabel")
 glow.AnchorPoint = Vector2.new(0.5, 0.5)
 glow.Position = UDim2.fromScale(0.5, 0.36)
@@ -184,25 +350,20 @@ glow.Image = "rbxassetid://5028857084"
 glow.ImageColor3 = accent
 glow.ImageTransparency = 0.9
 glow.Parent = center
-
 task.spawn(function()
     while Screen.Parent do
         TweenService:Create(glow, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
             Size = UDim2.fromOffset(320, 320),
             ImageTransparency = 0.95
         }):Play()
-
         task.wait(1.5)
-
         TweenService:Create(glow, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
             Size = UDim2.fromOffset(270, 270),
             ImageTransparency = 0.9
         }):Play()
-
         task.wait(1.5)
     end
 end)
-
 local animation = Instance.new("ImageLabel")
 animation.AnchorPoint = Vector2.new(0.5, 0.5)
 animation.Position = UDim2.fromScale(0.5, 0.36)
@@ -210,7 +371,6 @@ animation.Size = UDim2.fromOffset(150, 150)
 animation.BackgroundTransparency = 1
 animation.ImageTransparency = 1
 animation.Parent = center
-
 local frames = {
     "BoostLoading.png",
     "BoostLoading1.png",
@@ -218,49 +378,38 @@ local frames = {
     "BoostLoading3.png",
     "BoostLoading4.png",
     "BoostLoading5.png",
+    "BoostLoading6.png",
 }
-
 local cachedFrames = {}
-
 for _, name in ipairs(frames) do
     local path = ROOT .. "/Images/Animations/" .. name
-
     local asset = cache(
-        RAW .. "Images/Animations/LoadingAnimation/" .. name,
+        BASE .. "Images/Animations/LoadingAnimation/" .. name,
         path
     )
-
     if asset then
         table.insert(cachedFrames, asset)
     end
 end
-
 if cachedFrames[1] then
     animation.Image = cachedFrames[1]
 end
-
 TweenService:Create(
     animation,
     TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
     {ImageTransparency = 0}
 ):Play()
-
 task.spawn(function()
     local index = 1
-
     while Screen.Parent and #cachedFrames > 0 do
         animation.Image = cachedFrames[index]
-
         index = index + 1
-
         if index > #cachedFrames then
             index = 1
         end
-
         task.wait(0.11)
     end
 end)
-
 local title = Instance.new("TextLabel")
 title.AnchorPoint = Vector2.new(0.5, 0)
 title.Position = UDim2.fromScale(0.5, 0.50)
@@ -272,7 +421,6 @@ title.TextColor3 = Color3.fromRGB(245, 245, 248)
 title.TextSize = 36
 title.TextTransparency = 1
 title.Parent = center
-
 local line = Instance.new("Frame")
 line.AnchorPoint = Vector2.new(0.5, 0)
 line.Position = UDim2.fromScale(0.5, 0.65)
@@ -280,7 +428,6 @@ line.Size = UDim2.fromOffset(0, 2)
 line.BackgroundColor3 = accent
 line.BorderSizePixel = 0
 line.Parent = center
-
 local subtitle = Instance.new("TextLabel")
 subtitle.AnchorPoint = Vector2.new(0.5, 0)
 subtitle.Position = UDim2.fromScale(0.5, 0.68)
@@ -292,7 +439,6 @@ subtitle.TextColor3 = Color3.fromRGB(145, 148, 158)
 subtitle.TextSize = 11
 subtitle.TextTransparency = 1
 subtitle.Parent = center
-
 local status = Instance.new("TextLabel")
 status.AnchorPoint = Vector2.new(0.5, 0)
 status.Position = UDim2.fromScale(0.5, 0.76)
@@ -304,7 +450,6 @@ status.TextColor3 = accent
 status.TextSize = 11
 status.TextTransparency = 1
 status.Parent = center
-
 local percent = Instance.new("TextLabel")
 percent.AnchorPoint = Vector2.new(0.5, 0)
 percent.Position = UDim2.fromScale(0.5, 0.82)
@@ -316,7 +461,6 @@ percent.TextColor3 = Color3.fromRGB(145, 148, 158)
 percent.TextSize = 10
 percent.TextTransparency = 1
 percent.Parent = center
-
 local progressBG = Instance.new("Frame")
 progressBG.AnchorPoint = Vector2.new(0.5, 0)
 progressBG.Position = UDim2.fromScale(0.5, 0.89)
@@ -324,21 +468,17 @@ progressBG.Size = UDim2.fromOffset(340, 4)
 progressBG.BackgroundColor3 = Color3.fromRGB(28, 29, 35)
 progressBG.BorderSizePixel = 0
 progressBG.Parent = center
-
 local pc = Instance.new("UICorner")
 pc.CornerRadius = UDim.new(1, 0)
 pc.Parent = progressBG
-
 local progress = Instance.new("Frame")
 progress.Size = UDim2.fromScale(0, 1)
 progress.BackgroundColor3 = accent
 progress.BorderSizePixel = 0
 progress.Parent = progressBG
-
 local pc2 = Instance.new("UICorner")
 pc2.CornerRadius = UDim.new(1, 0)
 pc2.Parent = progress
-
 for _, obj in ipairs({title, subtitle, status, percent}) do
     TweenService:Create(
         obj,
@@ -346,31 +486,563 @@ for _, obj in ipairs({title, subtitle, status, percent}) do
         {TextTransparency = 0}
     ):Play()
 end
-
 TweenService:Create(
     line,
     TweenInfo.new(0.75, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
     {Size = UDim2.fromOffset(70, 2)}
 ):Play()
-
 local function setProgress(value, text)
     value = math.clamp(value, 0, 1)
-
     percent.Text = tostring(math.floor(value * 100)) .. "%"
     status.Text = text
-
     TweenService:Create(
         progress,
         TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
         {Size = UDim2.fromScale(value, 1)}
     ):Play()
 end
-
+-- =========================================================
+-- =========================================================
+-- TURBO KEY VERIFICATION UI / PREMIUM DOCK
+-- The key panel intentionally lives below the loading bar area
+-- so the main loading animation remains unobstructed.
+-- =========================================================
+local keyVerified = false
+local keyResult = nil
+local KEY_PATH = ROOT .. "/Config/KEY"
+local KEY_COOLDOWN = 5
+local lastKeyRequestAt = -math.huge
+local keyRequestBusy = false
+local function loadSavedKey()
+    local saved = readSafe(KEY_PATH)
+    if type(saved) ~= "string" or saved == "" then
+        saved = readSafe(ROOT .. "/Configs/KEY")
+    end
+    if type(saved) ~= "string" then
+        return ""
+    end
+    return saved:gsub("^%s+", ""):gsub("%s+$", ""):upper()
+end
+local function saveKey(key)
+    if type(key) ~= "string" or key == "" then
+        return false
+    end
+    writeSafe(KEY_PATH, key)
+    return isFile(KEY_PATH)
+end
+local oldKeyGui = PlayerGui:FindFirstChild("TurboKeyUI")
+if oldKeyGui then
+    oldKeyGui:Destroy()
+end
+local keyGui = Instance.new("ScreenGui")
+keyGui.Name = "TurboKeyUI"
+keyGui.IgnoreGuiInset = true
+keyGui.ResetOnSpawn = false
+keyGui.DisplayOrder = 2147483647
+keyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+keyGui.Parent = PlayerGui
+local keyRoot = Instance.new("Frame")
+keyRoot.Name = "Root"
+keyRoot.AnchorPoint = Vector2.new(0.5, 0.5)
+keyRoot.Position = UDim2.fromScale(0.5, 0.82)
+keyRoot.Size = UDim2.fromOffset(680, 156)
+keyRoot.BackgroundTransparency = 1
+keyRoot.Parent = keyGui
+local keyScale = Instance.new("UIScale")
+keyScale.Scale = 1
+keyScale.Parent = keyRoot
+local function updateKeyScale()
+    local camera = workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(1920, 1080)
+    local scale = math.min(viewport.X / 1920, viewport.Y / 1080)
+    keyScale.Scale = math.clamp(scale, 0.72, 1.08)
+end
+updateKeyScale()
+pcall(function()
+    local camera = workspace.CurrentCamera
+    if camera then
+        camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateKeyScale)
+    end
+end)
+-- Soft premium glow behind the dock.
+local keyShadow = Instance.new("ImageLabel")
+keyShadow.Name = "Shadow"
+keyShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+keyShadow.Position = UDim2.fromScale(0.5, 0.52)
+keyShadow.Size = UDim2.fromOffset(720, 185)
+keyShadow.BackgroundTransparency = 1
+keyShadow.Image = "rbxassetid://5028857084"
+keyShadow.ImageColor3 = accent
+keyShadow.ImageTransparency = 0.94
+keyShadow.ZIndex = 1
+keyShadow.Parent = keyRoot
+local keyCard = Instance.new("Frame")
+keyCard.Name = "Card"
+keyCard.AnchorPoint = Vector2.new(0.5, 0.5)
+keyCard.Position = UDim2.fromScale(0.5, 0.5)
+keyCard.Size = UDim2.fromOffset(650, 138)
+keyCard.BackgroundColor3 = Color3.fromRGB(9, 10, 14)
+keyCard.BackgroundTransparency = 0.035
+keyCard.BorderSizePixel = 0
+keyCard.ZIndex = 2
+keyCard.Parent = keyRoot
+local cardCorner = Instance.new("UICorner")
+cardCorner.CornerRadius = UDim.new(0, 18)
+cardCorner.Parent = keyCard
+local cardStroke = Instance.new("UIStroke")
+cardStroke.Color = Color3.fromRGB(64, 66, 78)
+cardStroke.Thickness = 1
+cardStroke.Transparency = 0.18
+cardStroke.Parent = keyCard
+local cardGradient = Instance.new("UIGradient")
+cardGradient.Rotation = 90
+cardGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 17, 23)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(10, 11, 16)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(7, 8, 12)),
+})
+cardGradient.Parent = keyCard
+local topLine = Instance.new("Frame")
+topLine.AnchorPoint = Vector2.new(0.5, 0)
+topLine.Position = UDim2.fromScale(0.5, 0)
+topLine.Size = UDim2.new(1, -56, 0, 2)
+topLine.BackgroundColor3 = accent
+topLine.BorderSizePixel = 0
+topLine.ZIndex = 4
+topLine.Parent = keyCard
+local topCorner = Instance.new("UICorner")
+topCorner.CornerRadius = UDim.new(1, 0)
+topCorner.Parent = topLine
+-- Small animated status marker.
+local liveDot = Instance.new("Frame")
+liveDot.Name = "LiveDot"
+liveDot.Position = UDim2.fromOffset(24, 21)
+liveDot.Size = UDim2.fromOffset(7, 7)
+liveDot.BackgroundColor3 = accent
+liveDot.BorderSizePixel = 0
+liveDot.ZIndex = 4
+liveDot.Parent = keyCard
+local liveCorner = Instance.new("UICorner")
+liveCorner.CornerRadius = UDim.new(1, 0)
+liveCorner.Parent = liveDot
+task.spawn(function()
+    while keyGui.Parent do
+        TweenService:Create(liveDot, TweenInfo.new(0.65, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            BackgroundTransparency = 0.65
+        }):Play()
+        task.wait(0.65)
+        TweenService:Create(liveDot, TweenInfo.new(0.65, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            BackgroundTransparency = 0
+        }):Play()
+        task.wait(0.65)
+    end
+end)
+local accessTag = Instance.new("TextLabel")
+accessTag.Name = "AccessTag"
+accessTag.Position = UDim2.fromOffset(38, 15)
+accessTag.Size = UDim2.fromOffset(190, 18)
+accessTag.BackgroundTransparency = 1
+accessTag.Font = Enum.Font.GothamBold
+accessTag.Text = "SECURE ACCESS  /  TURBO"
+accessTag.TextColor3 = Color3.fromRGB(116, 119, 132)
+accessTag.TextSize = 8
+accessTag.TextXAlignment = Enum.TextXAlignment.Left
+accessTag.ZIndex = 4
+accessTag.Parent = keyCard
+-- Premium Rocket Glitch animation.
+local animGlow = Instance.new("ImageLabel")
+animGlow.Name = "RocketGlow"
+animGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+animGlow.Position = UDim2.fromOffset(120, 110)
+animGlow.Size = UDim2.fromOffset(126, 126)
+animGlow.BackgroundTransparency = 1
+animGlow.Image = "rbxassetid://5028857084"
+animGlow.ImageColor3 = accent
+animGlow.ImageTransparency = 0.94
+animGlow.ZIndex = 2
+animGlow.Parent = keyCard
+local turboLogo = Instance.new("ImageLabel")
+turboLogo.Name = "TurboLogo"
+turboLogo.AnchorPoint = Vector2.new(0.5, 0.5)
+turboLogo.Position = UDim2.fromOffset(62, 82)
+turboLogo.Size = UDim2.fromOffset(85, 85)
+turboLogo.BackgroundTransparency = 1
+turboLogo.BorderSizePixel = 0
+turboLogo.ScaleType = Enum.ScaleType.Fit
+turboLogo.ImageTransparency = 0.4
+turboLogo.ZIndex = 6
+turboLogo.Parent = keyCard
+local turboLogoAsset = cache(BASE .. "Images/turbo.png", ROOT .. "/Images/Icons/TurboLogoV3.png")
+if turboLogoAsset then
+    turboLogo.Image = turboLogoAsset
+else
+    warn("[Turbo] Turbo.png logo could not be loaded.")
+end
+local animFrame = Instance.new("ImageLabel")
+animFrame.Name = "TurboGlitchAnimation"
+animFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+animFrame.Position = UDim2.fromOffset(133, 109)
+animFrame.Size = UDim2.fromOffset(85, 85)
+animFrame.BackgroundTransparency = 1
+animFrame.BorderSizePixel = 0
+animFrame.ScaleType = Enum.ScaleType.Fit
+animFrame.ImageTransparency = 0
+animFrame.ZIndex = 5
+animFrame.Parent = keyCard
+local rocketFrames = {
+    "boost.png",
+    "boost1.png",
+    "boost2.png",
+    "boost3.png",
+    "boost4.png",
+}
+local rocketAssets = {}
+for _, fileName in ipairs(rocketFrames) do
+    local path = ROOT .. "/Images/Animations/RocketGlitchV2/" .. fileName
+    local asset = cache(BASE .. "Images/Animations/RocketGlitch/" .. fileName, path)
+    if asset then
+        table.insert(rocketAssets, asset)
+    end
+end
+if #rocketAssets == 0 then
+    warn("[Turbo] RocketGlitch animation frames could not be loaded.")
+end
+if rocketAssets[1] then
+    animFrame.Image = rocketAssets[1]
+end
+task.spawn(function()
+    local index = 1
+    while keyGui.Parent do
+        if #rocketAssets > 0 then
+            animFrame.Image = rocketAssets[index]
+            index = index + 1
+            if index > #rocketAssets then index = 1 end
+        end
+        task.wait(0.045)
+    end
+end)
+task.spawn(function()
+    while keyGui.Parent do
+        TweenService:Create(animGlow, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            ImageTransparency = 0.91,
+            Size = UDim2.fromOffset(142, 142),
+        }):Play()
+        task.wait(0.55)
+        TweenService:Create(animGlow, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            ImageTransparency = 0.96,
+            Size = UDim2.fromOffset(126, 126),
+        }):Play()
+        task.wait(0.55)
+    end
+end)
+local keyTitle = Instance.new("TextLabel")
+keyTitle.Name = "Title"
+keyTitle.Position = UDim2.fromOffset(150, 36)
+keyTitle.Size = UDim2.fromOffset(245, 25)
+keyTitle.BackgroundTransparency = 1
+keyTitle.Font = Enum.Font.GothamBlack
+keyTitle.Text = "TURBO ACCESS"
+keyTitle.TextColor3 = Color3.fromRGB(246, 247, 250)
+keyTitle.TextSize = 18
+keyTitle.TextXAlignment = Enum.TextXAlignment.Left
+keyTitle.ZIndex = 4
+keyTitle.Parent = keyCard
+local keySubtitle = Instance.new("TextLabel")
+keySubtitle.Name = "Subtitle"
+keySubtitle.Position = UDim2.fromOffset(150, 61)
+keySubtitle.Size = UDim2.fromOffset(245, 18)
+keySubtitle.BackgroundTransparency = 1
+keySubtitle.Font = Enum.Font.GothamMedium
+keySubtitle.Text = "Enter your license key to continue."
+keySubtitle.TextColor3 = Color3.fromRGB(126, 129, 141)
+keySubtitle.TextSize = 9
+keySubtitle.TextXAlignment = Enum.TextXAlignment.Left
+keySubtitle.ZIndex = 4
+keySubtitle.Parent = keyCard
+local keyBox = Instance.new("TextBox")
+keyBox.Name = "KeyInput"
+keyBox.Position = UDim2.fromOffset(150, 88)
+keyBox.Size = UDim2.fromOffset(300, 36)
+keyBox.BackgroundColor3 = Color3.fromRGB(20, 21, 28)
+keyBox.BackgroundTransparency = 0.02
+keyBox.BorderSizePixel = 0
+keyBox.ClearTextOnFocus = false
+keyBox.Font = Enum.Font.GothamMedium
+keyBox.PlaceholderText = "TURBO-XXXX-XXXX"
+keyBox.PlaceholderColor3 = Color3.fromRGB(74, 76, 88)
+keyBox.Text = ""
+keyBox.TextColor3 = Color3.fromRGB(238, 239, 243)
+keyBox.TextSize = 10
+keyBox.TextXAlignment = Enum.TextXAlignment.Left
+keyBox.ZIndex = 4
+keyBox.Parent = keyCard
+local keyBoxStroke = Instance.new("UIStroke")
+keyBoxStroke.Color = Color3.fromRGB(53, 55, 66)
+keyBoxStroke.Thickness = 1
+keyBoxStroke.Transparency = 0.18
+keyBoxStroke.Parent = keyBox
+local keyBoxPadding = Instance.new("UIPadding")
+keyBoxPadding.PaddingLeft = UDim.new(0, 12)
+keyBoxPadding.PaddingRight = UDim.new(0, 10)
+keyBoxPadding.Parent = keyBox
+local keyBoxCorner = Instance.new("UICorner")
+keyBoxCorner.CornerRadius = UDim.new(0, 9)
+keyBoxCorner.Parent = keyBox
+local verifyButton = Instance.new("TextButton")
+verifyButton.Name = "Verify"
+verifyButton.Position = UDim2.fromOffset(460, 88)
+verifyButton.Size = UDim2.fromOffset(164, 36)
+verifyButton.BackgroundColor3 = accent
+verifyButton.BorderSizePixel = 0
+verifyButton.AutoButtonColor = false
+verifyButton.Font = Enum.Font.GothamBold
+verifyButton.Text = "VERIFY  >"
+verifyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+verifyButton.TextSize = 10
+verifyButton.ZIndex = 4
+verifyButton.Parent = keyCard
+local verifyCorner = Instance.new("UICorner")
+verifyCorner.CornerRadius = UDim.new(0, 9)
+verifyCorner.Parent = verifyButton
+local keyError = Instance.new("TextLabel")
+keyError.Name = "Error"
+keyError.Position = UDim2.fromOffset(150, 126)
+keyError.Size = UDim2.fromOffset(474, 12)
+keyError.BackgroundTransparency = 1
+keyError.Font = Enum.Font.GothamMedium
+keyError.Text = ""
+keyError.TextColor3 = Color3.fromRGB(220, 70, 85)
+keyError.TextSize = 8
+keyError.TextXAlignment = Enum.TextXAlignment.Left
+keyError.ZIndex = 4
+keyError.Parent = keyCard
+local keyFooter = Instance.new("TextLabel")
+keyFooter.Name = "Footer"
+keyFooter.AnchorPoint = Vector2.new(1, 0)
+keyFooter.Position = UDim2.new(1, -25, 0, 18)
+keyFooter.Size = UDim2.fromOffset(170, 18)
+keyFooter.BackgroundTransparency = 1
+keyFooter.Font = Enum.Font.GothamMedium
+keyFooter.Text = "LICENSE VERIFICATION  -  ONLINE"
+keyFooter.TextColor3 = Color3.fromRGB(70, 72, 84)
+keyFooter.TextSize = 7
+keyFooter.TextXAlignment = Enum.TextXAlignment.Right
+keyFooter.ZIndex = 4
+keyFooter.Parent = keyCard
+local function setKeyError(message)
+    keyError.Text = message or ""
+end
+local function closeKeyGui(success)
+    if not keyGui.Parent then
+        return
+    end
+    if success then
+        TweenService:Create(
+            keyRoot,
+            TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {Position = UDim2.fromScale(0.5, 0.86)}
+        ):Play()
+        TweenService:Create(
+            keyCard,
+            TweenInfo.new(0.30, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {BackgroundTransparency = 1}
+        ):Play()
+        TweenService:Create(
+            keyShadow,
+            TweenInfo.new(0.30, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {ImageTransparency = 1}
+        ):Play()
+        for _, obj in ipairs(keyCard:GetDescendants()) do
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                TweenService:Create(obj, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    TextTransparency = 1,
+                }):Play()
+            elseif obj:IsA("ImageLabel") then
+                TweenService:Create(obj, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    ImageTransparency = 1,
+                }):Play()
+            elseif obj:IsA("UIStroke") then
+                TweenService:Create(obj, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    Transparency = 1,
+                }):Play()
+            elseif obj:IsA("Frame") then
+                TweenService:Create(obj, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                    BackgroundTransparency = 1,
+                }):Play()
+            end
+        end
+        task.wait(0.36)
+    end
+    keyGui:Destroy()
+end
+local function verifyEnteredKey()
+    if keyVerified or keyRequestBusy then
+        return
+    end
+    local now = os.clock()
+    local remaining = KEY_COOLDOWN - (now - lastKeyRequestAt)
+    if remaining > 0 then
+        setKeyError("Please wait " .. tostring(math.ceil(remaining)) .. "s before trying again.")
+        setProgress(0.66, "REQUEST COOLDOWN")
+        return
+    end
+    local enteredKey = tostring(keyBox.Text or "")
+        :gsub("^%s+", "")
+        :gsub("%s+$", "")
+        :upper()
+    if enteredKey == "" then
+        setKeyError("Please enter a key.")
+        return
+    end
+    local hwid, hwidError = getHWID()
+    if not hwid then
+        setKeyError(hwidError or "Could not get HWID from executor.")
+        return
+    end
+    local executor = getExecutorName()
+    keyRequestBusy = true
+    lastKeyRequestAt = os.clock()
+    verifyButton.Text = "CHECKING  ..."
+    verifyButton.Active = false
+    keyBox.Active = false
+    setKeyError("")
+    setProgress(0.66, "VERIFYING KEY")
+    local response, requestError = requestVerifyKey(enteredKey, hwid, executor)
+    keyRequestBusy = false
+    verifyButton.Active = true
+    keyBox.Active = true
+    verifyButton.Text = "VERIFY  >"
+    if not response then
+        setKeyError(requestError or "Unable to contact the key server.")
+        setProgress(0.66, "KEYSERVER ERROR")
+        return
+    end
+    if response.success == true and response.valid == true
+        and (response.code == "AUTHORIZED" or response.code == "KEY_REGISTERED") then
+        keyVerified = true
+        keyResult = response
+        saveKey(enteredKey)
+        local owner = tostring(response.owner_name or "User")
+        keyTitle.Text = "ACCESS GRANTED"
+        keySubtitle.Text = "Welcome, " .. owner .. "."
+        setKeyError("")
+        status.Text = "KEY VERIFIED"
+        status.TextColor3 = Color3.fromRGB(90, 220, 130)
+        setProgress(0.70, "KEY VERIFIED")
+        playSound("select", "select.ogg", nil, 0.32)
+        closeKeyGui(true)
+    else
+        local code = tostring(response.code or "UNKNOWN_ERROR")
+        local messages = {
+            INVALID_KEY = "This key does not exist.",
+            KEY_DISABLED = "This key is disabled.",
+            KEY_EXPIRED = "This key has expired.",
+            HWID_MISMATCH = "This key is already registered to another HWID.",
+            MISSING_KEY = "A key is required.",
+            MISSING_HWID = "HWID is required.",
+            SERVER_ERROR = "The key server encountered an error.",
+        }
+        setKeyError(messages[code] or tostring(response.message or "Key verification failed."))
+        setProgress(0.66, "ACCESS DENIED")
+        playSound("lock", "lock.ogg", "select.ogg", 0.30)
+    end
+end
+verifyButton.MouseEnter:Connect(function()
+    TweenService:Create(
+        verifyButton,
+        TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {BackgroundColor3 = Color3.fromRGB(242, 70, 87)}
+    ):Play()
+    playSound("hover", "hover.ogg", nil, 0.18)
+end)
+verifyButton.MouseLeave:Connect(function()
+    TweenService:Create(
+        verifyButton,
+        TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {BackgroundColor3 = accent}
+    ):Play()
+end)
+verifyButton.Activated:Connect(verifyEnteredKey)
+keyBox.Focused:Connect(function()
+    TweenService:Create(
+        keyBoxStroke,
+        TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {Color = accent, Transparency = 0}
+    ):Play()
+end)
+keyBox.FocusLost:Connect(function(enterPressed)
+    TweenService:Create(
+        keyBoxStroke,
+        TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {Color = Color3.fromRGB(53, 55, 66), Transparency = 0.18}
+    ):Play()
+    if enterPressed then
+        verifyEnteredKey()
+    end
+end)
+-- Soft entrance: the dock slides into place without covering the loading animation.
+keyRoot.Position = UDim2.fromScale(0.5, 0.88)
+keyCard.BackgroundTransparency = 1
+keyShadow.ImageTransparency = 1
+for _, obj in ipairs(keyCard:GetDescendants()) do
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+        obj.TextTransparency = 1
+    elseif obj:IsA("ImageLabel") then
+        obj.ImageTransparency = 1
+    elseif obj:IsA("UIStroke") then
+        obj.Transparency = 1
+    elseif obj:IsA("Frame") and obj ~= keyCard then
+        obj.BackgroundTransparency = 1
+    end
+end
+TweenService:Create(
+    keyRoot,
+    TweenInfo.new(0.75, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    {Position = UDim2.fromScale(0.5, 0.82)}
+):Play()
+TweenService:Create(
+    keyCard,
+    TweenInfo.new(0.55, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    {BackgroundTransparency = 0.035}
+):Play()
+TweenService:Create(
+    keyShadow,
+    TweenInfo.new(0.60, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    {ImageTransparency = 0.94}
+):Play()
+for _, obj in ipairs(keyCard:GetDescendants()) do
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+        TweenService:Create(obj, TweenInfo.new(0.50, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            TextTransparency = 0
+        }):Play()
+    elseif obj:IsA("ImageLabel") then
+        TweenService:Create(obj, TweenInfo.new(0.50, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            ImageTransparency = obj == animGlow and 0.95 or 0
+        }):Play()
+    elseif obj:IsA("UIStroke") then
+        TweenService:Create(obj, TweenInfo.new(0.50, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Transparency = 0.18
+        }):Play()
+    elseif obj:IsA("Frame") and obj ~= keyCard then
+        TweenService:Create(obj, TweenInfo.new(0.50, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0
+        }):Play()
+    end
+end
+local savedKey = loadSavedKey()
+if savedKey ~= "" then
+    keyBox.Text = savedKey
+    keySubtitle.Text = "Saved license found. Verifying automatically..."
+    task.spawn(function()
+        task.wait(0.35)
+        if not keyVerified and keyGui.Parent then
+            verifyEnteredKey()
+        end
+    end)
+end
 setProgress(0.12, "CONNECTING")
 task.wait(0.08)
-
 setProgress(0.25, "PREPARING AUDIO")
-
 for _, pair in ipairs({
     {"open", "gui_open.ogg", nil},
     {"close", "gui_close.ogg", nil},
@@ -381,17 +1053,36 @@ for _, pair in ipairs({
 }) do
     getSound(pair[1], pair[2], pair[3])
 end
-
 setProgress(0.46, "LOADING ANIMATION")
 task.wait(0.08)
-
-setProgress(0.60, "WARMING CACHE")
-
+setProgress(0.60, "WAITING FOR KEY")
+while not keyVerified and Screen.Parent do
+    task.wait(0.10)
+end
+if not keyVerified then
+    warn("[Turbo] Loader stopped before key verification completed.")
+    return
+end
+-- REQUIRED ICON CACHE
+-- =========================================================
+local requiredIcons = {
+    "turbo.png", "aim.png", "always.png", "behind.png", "bind.png", "block.png",
+    "body_parts.png", "character.png", "config.png", "console.png", "contacts.png",
+    "crosshair.png", "dashboard.png", "deadzone.png", "delay.png", "distance.png",
+    "eye.png", "file.png", "file_config.png", "hidden.png", "hourglass.png",
+    "info.png", "keyboard.png", "methods.png", "mouse.png", "panic.png",
+    "prediction.png", "priority.png", "shield.png", "smooth.png", "target.png",
+}
+for _, fileName in ipairs(requiredIcons) do
+    local path = ROOT .. "/Images/Icons/" .. fileName
+    local asset = cache(BASE .. "Images/" .. fileName, path)
+    if not asset then
+        warn("[Turbo] Failed to cache icon:", fileName)
+    end
+end
 -- =========================================================
 -- PROTECTED MAIN: MEMORY-ONLY
--- Main.lua is NEVER written to disk and there is no local fallback.
 -- =========================================================
-
 local function fnv1a(data)
     local h = 2166136261
     local bxor = bit32 and bit32.bxor
@@ -402,90 +1093,63 @@ local function fnv1a(data)
     end
     return string.format("%08x", h)
 end
-
 local function saneMain(data)
-    return type(data) == "string"
-        and #data >= 1000
-        and #data <= 4000000
-        and not data:find("\0", 1, true)
+    if type(data) ~= "string" then
+        return false
+    end
+    local len = #data
+    if len < 1000 or len > 4000000 then
+        return false
+    end
+    return not data:find("\0", 1, true)
 end
-
 local function readIntegrityManifest()
-    local manifest = httpGet(RAW .. "Configs/integrity.txt")
+    local manifest = httpGet(BASE .. "Configs/integrity.txt")
     if not manifest then return nil end
     local expected = manifest:match("MAIN%s*=%s*([%x]+)")
     return expected and string.lower(expected) or nil
 end
-
-local mainCode = httpGet(RAW .. "Main")
+local mainCode = httpGet(MAIN_URL)
 local mainIntegrityExpected = readIntegrityManifest()
 local mainIntegrityActual = mainCode and fnv1a(mainCode) or nil
-
 if not saneMain(mainCode) then
+    local mainLen = type(mainCode) == "string" and #mainCode or 0
+    warn("[Turbo] Main rejected by integrity sanity check. Type:", type(mainCode), "Length:", mainLen)
     mainCode = nil
-    warn("[Turbo] Main rejected by integrity sanity check.")
 elseif mainIntegrityExpected and mainIntegrityActual ~= mainIntegrityExpected then
     warn("[Turbo] Main integrity mismatch; execution aborted.")
     mainCode = nil
 end
-
--- Keep the source only in memory. Do not write Main to Turbo/Main.lua.
--- Asset caching below is intentionally limited to sounds/images.
-
-
 setProgress(0.72, "BUILDING UI")
 task.wait(0.08)
-
--- =========================================================
--- MAIN EXECUTION
--- IMPORTANT: Main is executed completely unmodified.
--- The premium layer is attached only after Main creates Turbo.
--- =========================================================
-
--- =========================================================
--- EXECUTE CURRENT MAIN
--- =========================================================
-
 setProgress(0.90, "SYNCING CONTROLS")
 task.wait(0.08)
-
 setProgress(1, "READY")
 task.wait(0.20)
-
 local mainRunOK = false
 local mainRunError = nil
 local mainCompileError = nil
-
 if mainCode then
-    -- Basic runtime anti-tamper: fail closed if the execution primitives were replaced.
     local primitivesOK = type(loadstring) == "function"
         and type(pcall) == "function"
         and type(rawget) == "function"
         and type(task) == "table"
         and type(task.wait) == "function"
-
     if not primitivesOK then
         mainRunError = "Runtime integrity check failed."
         warn("[Turbo] Runtime integrity check failed.")
         mainCode = nil
     end
 end
-
 if mainCode then
     local fn, compileError = loadstring(mainCode)
-
     if not fn then
         mainCompileError = compileError
         warn("[Turbo] Main compile error:", compileError)
     else
-        -- IMPORTANT: run Main synchronously. The previous versions started
-        -- Main in task.spawn and then tried to find its GUI from a second
-        -- thread. If Main failed or was still initializing, the premium
-        -- layer could finish with only the loader visible.
         local ok, err = pcall(fn)
         mainRunOK = ok
         mainRunError = err
-
         if not ok then
             warn("[Turbo] Main runtime error:", err)
         end
@@ -493,19 +1157,12 @@ if mainCode then
 else
     warn("[Turbo] Could not load Main.")
 end
-
--- =========================================================
--- WAIT FOR TURBO GUI
--- =========================================================
-
 local TurboGui
-
 for _ = 1, 60 do
     TurboGui = PlayerGui:FindFirstChild("Turbo")
     if TurboGui then break end
     task.wait(0.05)
 end
-
 if not TurboGui then
     warn("[Turbo] Main finished but ScreenGui 'Turbo' was not created.")
     if mainCompileError then
@@ -514,653 +1171,22 @@ if not TurboGui then
         warn("[Turbo] Runtime error:", mainRunError)
     end
 end
-
--- The runtime below needs the actual GUI and Main locals from Main.
-local turboGui = TurboGui
-
-if turboGui then
-    -- Main owns the lock UI, but it may leave the root ScreenGui/frame hidden
-    -- while it initializes. The premium loader must never finish with an
-    -- invisible menu.
-    pcall(function()
-        turboGui.Enabled = true
-    end)
-end
-
-if turboGui then
-
--- =========================================================
--- TURBO PREMIUM INTERACTION RUNTIME
--- Runs AFTER Main so no local-function/nil-scope patching is needed.
--- Restores premium hover/click/tab/toggle/menu interactions safely.
--- =========================================================
-
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local SoundService = game:GetService("SoundService")
-
-if turboGui then
-    pcall(function()
-        turboGui.DisplayOrder = 2147483645
-        turboGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    end)
-end
-
-local TurboUI = {}
-
-local function turboAsset(fileName)
-    local path = ROOT .. "/Sounds/" .. fileName
-    return cache(RAW .. "Sounds/" .. fileName, path)
-end
-
-local function turboRuntimeSound(name, fileName, fallback, volume)
-    if TurboUI[name] then
-        return TurboUI[name]
+if not mainRunOK then
+    local errorText = mainCompileError and "MAIN COMPILE ERROR"
+        or mainRunError and "MAIN RUNTIME ERROR"
+        or "TURBO GUI NOT CREATED"
+    local statusLabel = Screen and Screen:FindFirstChild("Status", true)
+    if statusLabel and statusLabel:IsA("TextLabel") then
+        statusLabel.Text = errorText
+        statusLabel.TextColor3 = Color3.fromRGB(220, 70, 85)
     end
-
-    local asset = turboAsset(fileName)
-    if not asset and fallback then
-        asset = turboAsset(fallback)
-    end
-    if not asset then return nil end
-
-    local s = Instance.new("Sound")
-    s.Name = "TurboUI_" .. name
-    s.SoundId = asset
-    s.Volume = volume or 0.25
-    s.Parent = SoundService
-    TurboUI[name] = s
-    return s
-end
-
-local function turboPlay(name, fileName, fallback, volume)
-    local s = turboRuntimeSound(name, fileName, fallback, volume)
-    if not s then return end
-
-    pcall(function()
-        s.Volume = volume or s.Volume
-        s.TimePosition = 0
-        s:Play()
-    end)
-end
-
--- =========================================================
--- FIND THE MAIN CONTENT FRAME
--- =========================================================
-
-local function findMainFrame(gui)
-    if not gui then return nil end
-
-    local best, bestArea = nil, -1
-
-    for _, child in ipairs(gui:GetChildren()) do
-        if child:IsA("Frame") or child:IsA("ScrollingFrame") then
-            local size = child.AbsoluteSize
-            local area = size.X * size.Y
-
-            if area > bestArea then
-                best = child
-                bestArea = area
-            end
-        end
-    end
-
-    return best
-end
-
-local mainFrame = findMainFrame(turboGui)
-
--- Make only the root content container visible. Do NOT touch child tab
--- visibility, otherwise Character/AimParts/Settings would all overlap.
-if mainFrame then
-    pcall(function()
-        mainFrame.Visible = true
-    end)
-end
-
--- A few executors/games create the root frame a little after ScreenGui.
--- Re-check briefly without changing any tab states.
-task.spawn(function()
-    for _ = 1, 25 do
-        if not turboGui or not turboGui.Parent then return end
-
-        pcall(function()
-            turboGui.Enabled = true
-        end)
-
-        if not mainFrame or not mainFrame.Parent then
-            mainFrame = findMainFrame(turboGui)
-        end
-
-        if mainFrame then
-            pcall(function()
-                mainFrame.Visible = true
-            end)
-            return
-        end
-
-        task.wait(0.08)
-    end
-end)
-
--- =========================================================
--- PREMIUM MENU OPEN / CLOSE
--- =========================================================
-
-local menuScale
-local menuBusy = false
-local menuOpen = true
-
-local function setupMenuScale()
-    if not mainFrame or not mainFrame.Parent then
-        mainFrame = findMainFrame(turboGui)
-    end
-    if not mainFrame then return nil end
-
-    menuScale = mainFrame:FindFirstChild("TurboPremiumMenuScale")
-
-    if not menuScale then
-        menuScale = Instance.new("UIScale")
-        menuScale.Name = "TurboPremiumMenuScale"
-        menuScale.Scale = 1
-        menuScale.Parent = mainFrame
-    end
-
-    return menuScale
-end
-
-local function animateMenuOpen()
-    if not turboGui or not turboGui.Parent then return end
-    if menuBusy then return end
-
-    menuBusy = true
-    menuOpen = true
-    turboGui.Enabled = true
-
-    local frame = mainFrame or findMainFrame(turboGui)
-    local scale = setupMenuScale()
-
-    if frame and scale then
-        local original = frame.Position
-
-        scale.Scale = 0.965
-        frame.Position = original + UDim2.fromOffset(0, 12)
-
-        TweenService:Create(
-            scale,
-            TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Scale = 1}
-        ):Play()
-
-        TweenService:Create(
-            frame,
-            TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Position = original}
-        ):Play()
-    end
-
-    turboPlay("menuOpen", "gui_open.ogg", "click.ogg", 0.40)
-
-    task.delay(0.36, function()
-        menuBusy = false
-    end)
-end
-
-local function animateMenuClose()
-    if not turboGui or not turboGui.Parent then return end
-    if menuBusy then return end
-
-    menuBusy = true
-    menuOpen = false
-
-    local frame = mainFrame or findMainFrame(turboGui)
-    local scale = setupMenuScale()
-
-    turboPlay("menuClose", "gui_close.ogg", "click.ogg", 0.34)
-
-    if frame and scale then
-        local original = frame.Position
-
-        TweenService:Create(
-            scale,
-            TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-            {Scale = 0.965}
-        ):Play()
-
-        TweenService:Create(
-            frame,
-            TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-            {Position = original + UDim2.fromOffset(0, 10)}
-        ):Play()
-
-        task.delay(0.21, function()
-            if frame and frame.Parent then
-                frame.Position = original
-                scale.Scale = 1
-            end
-            if turboGui and turboGui.Parent and not menuOpen then
-                turboGui.Enabled = false
-            end
-            menuBusy = false
-        end)
-    else
-        turboGui.Enabled = false
-        menuBusy = false
-    end
-end
-
-local function toggleMenu()
-    if not turboGui or not turboGui.Parent then return end
-
-    local currentlyOpen = turboGui.Enabled == true
-        and mainFrame ~= nil
-        and mainFrame.Parent ~= nil
-        and mainFrame.Visible == true
-
-    if currentlyOpen then
-        animateMenuClose()
-    else
-        animateMenuOpen()
-    end
-end
-
--- Forward declare: setupButton (abaixo) chama animateTabPanel no click;
--- em Lua, "local function" só existe a partir da linha da definição.
-local animateTabPanel
-
--- =========================================================
--- PREMIUM HOVER + CLICK SYSTEM
--- =========================================================
-
-local function setupButton(button)
-    if not button or not button:IsA("GuiButton") then
-        return
-    end
-
-    if button:GetAttribute("TurboPremiumHooked") then
-        return
-    end
-
-    button:SetAttribute("TurboPremiumHooked", true)
-    button.AutoButtonColor = false
-
-    local scale = button:FindFirstChild("TurboHoverScale")
-
-    if not scale then
-        scale = Instance.new("UIScale")
-        scale.Name = "TurboHoverScale"
-        scale.Scale = 1
-        scale.Parent = button
-    end
-
-    local stroke = button:FindFirstChild("TurboHoverStroke")
-
-    if not stroke then
-        stroke = Instance.new("UIStroke")
-        stroke.Name = "TurboHoverStroke"
-        stroke.Thickness = 1
-        stroke.Transparency = 1
-        stroke.Color = Color3.fromRGB(225, 55, 72)
-        stroke.Parent = button
-    end
-
-    local normalBackground = nil
-
-    if button:IsA("TextButton") or button:IsA("ImageButton") then
-        normalBackground = button.BackgroundColor3
-    end
-
-    button.MouseEnter:Connect(function()
-        if not button.Parent then return end
-
-        TweenService:Create(
-            scale,
-            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Scale = 1.035}
-        ):Play()
-
-        TweenService:Create(
-            stroke,
-            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Transparency = 0.35}
-        ):Play()
-
-        turboPlay("hover", "hover.ogg", "click.ogg", 0.16)
-    end)
-
-    button.MouseLeave:Connect(function()
-        if not button.Parent then return end
-
-        TweenService:Create(
-            scale,
-            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Scale = 1}
-        ):Play()
-
-        TweenService:Create(
-            stroke,
-            TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Transparency = 1}
-        ):Play()
-    end)
-
-    button.Activated:Connect(function()
-        if not button.Parent then return end
-
-        TweenService:Create(
-            scale,
-            TweenInfo.new(0.065, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Scale = 0.96}
-        ):Play()
-
-        task.delay(0.065, function()
-            if scale and scale.Parent then
-                TweenService:Create(
-                    scale,
-                    TweenInfo.new(0.17, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-                    {Scale = 1}
-                ):Play()
-            end
-        end)
-
-        turboPlay("click", "click.ogg", "select.ogg", 0.28)
-
-        -- Give tab content a moment to change Visible, then animate it.
-        task.defer(function()
-            task.wait()
-            if turboGui and turboGui.Parent then
-                -- Find sizeable visible content frames and give the newest tab panel
-                -- a small slide-in. Small controls are intentionally ignored.
-                for _, obj in ipairs(turboGui:GetDescendants()) do
-                    if (obj:IsA("Frame") or obj:IsA("ScrollingFrame"))
-                        and obj.Visible
-                        and obj.AbsoluteSize.X >= 220
-                        and obj.AbsoluteSize.Y >= 100
-                        and obj:GetAttribute("TurboTabPanel") then
-
-                        if animateTabPanel then
-                            animateTabPanel(obj)
-                        end
-                    end
-                end
-            end
-        end)
-    end)
-end
-
--- =========================================================
--- TAB PANELS
--- =========================================================
-
-local function markTabPanels(gui)
-    if not gui then return end
-
-    for _, obj in ipairs(gui:GetDescendants()) do
-        if (obj:IsA("Frame") or obj:IsA("ScrollingFrame"))
-            and obj.AbsoluteSize.X >= 220
-            and obj.AbsoluteSize.Y >= 100 then
-
-            local name = string.lower(obj.Name)
-
-            if name:find("character", 1, true)
-                or name:find("aim", 1, true)
-                or name:find("whitelist", 1, true)
-                or name:find("settings", 1, true)
-                or name:find("config", 1, true)
-                or name:find("appearance", 1, true)
-                or name:find("tab", 1, true)
-                or name:find("content", 1, true)
-                or name:find("page", 1, true) then
-
-                obj:SetAttribute("TurboTabPanel", true)
-            end
-        end
-    end
-end
-
--- Animate panels whenever Main changes their visibility.
-local tabBasePositions = setmetatable({}, {__mode = "k"})
-
-local function getTabBasePosition(obj)
-    local base = tabBasePositions[obj]
-    if base == nil then
-        base = obj.Position
-        tabBasePositions[obj] = base
-    end
-    return base
-end
-
-animateTabPanel = function(obj)
-    if not obj or not obj.Parent or not obj.Visible then return end
-
-    local target = getTabBasePosition(obj)
-    local scale = obj:FindFirstChild("TurboTabScale")
-
-    if not scale then
-        scale = Instance.new("UIScale")
-        scale.Name = "TurboTabScale"
-        scale.Parent = obj
-    end
-
-    -- Always start from the SAME base position. Never add the 12px offset
-    -- to the panel's already-animated position. This prevents tab drift.
-    obj.Position = target + UDim2.fromOffset(12, 0)
-    scale.Scale = 0.985
-
-    TweenService:Create(
-        scale,
-        TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-        {Scale = 1}
-    ):Play()
-
-    TweenService:Create(
-        obj,
-        TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-        {Position = target}
-    ):Play()
-end
-
-local function hookTabPanel(obj)
-    if not (obj:IsA("Frame") or obj:IsA("ScrollingFrame")) then
-        return
-    end
-
-    if not obj:GetAttribute("TurboTabPanel") then
-        return
-    end
-
-    if obj:GetAttribute("TurboTabVisibilityHooked") then
-        return
-    end
-
-    obj:SetAttribute("TurboTabVisibilityHooked", true)
-    tabBasePositions[obj] = obj.Position
-
-    obj:GetPropertyChangedSignal("Visible"):Connect(function()
-        if obj.Visible and turboGui and turboGui.Parent then
-            animateTabPanel(obj)
-        end
-    end)
-end
-
-if turboGui then
-    markTabPanels(turboGui)
-
-    for _, obj in ipairs(turboGui:GetDescendants()) do
-        if obj:IsA("GuiButton") then
-            setupButton(obj)
-        end
-        hookTabPanel(obj)
-    end
-
-    turboGui.DescendantAdded:Connect(function(obj)
-        task.defer(function()
-            if not turboGui or not turboGui.Parent then return end
-
-            if obj:IsA("GuiButton") then
-                setupButton(obj)
-            end
-
-            if obj:IsA("Frame") or obj:IsA("ScrollingFrame") then
-                local size = obj.AbsoluteSize
-                if size.X >= 220 and size.Y >= 100 then
-                    local name = string.lower(obj.Name)
-                    if name:find("character", 1, true)
-                        or name:find("aim", 1, true)
-                        or name:find("whitelist", 1, true)
-                        or name:find("settings", 1, true)
-                        or name:find("config", 1, true)
-                        or name:find("appearance", 1, true)
-                        or name:find("tab", 1, true)
-                        or name:find("content", 1, true)
-                        or name:find("page", 1, true) then
-                        obj:SetAttribute("TurboTabPanel", true)
-                    end
-                end
-                hookTabPanel(obj)
-            end
-        end)
-    end)
-end
-
--- =========================================================
--- TOGGLE / SWITCH FEEDBACK
--- =========================================================
-
-local function hookSwitchVisuals(obj)
-    if not obj or not obj:IsA("GuiButton") then return end
-    if obj:GetAttribute("TurboSwitchHooked") then return end
-
-    local name = string.lower(obj.Name .. " " .. (obj:IsA("TextButton") and obj.Text or ""))
-
-    if not (
-        name:find("enable", 1, true)
-        or name:find("disable", 1, true)
-        or name:find("toggle", 1, true)
-        or name:find("switch", 1, true)
-        or name:find("lock", 1, true)
-    ) then
-        return
-    end
-
-    obj:SetAttribute("TurboSwitchHooked", true)
-
-    obj.Activated:Connect(function()
-        turboPlay("switch", "select.ogg", "click.ogg", 0.30)
-
-        local scale = obj:FindFirstChild("TurboSwitchScale")
-        if not scale then
-            scale = Instance.new("UIScale")
-            scale.Name = "TurboSwitchScale"
-            scale.Parent = obj
-        end
-
-        TweenService:Create(
-            scale,
-            TweenInfo.new(0.07, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-            {Scale = 0.95}
-        ):Play()
-
-        task.delay(0.07, function()
-            if scale and scale.Parent then
-                TweenService:Create(
-                    scale,
-                    TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-                    {Scale = 1}
-                ):Play()
-            end
-        end)
-    end)
-end
-
-if turboGui then
-    for _, obj in ipairs(turboGui:GetDescendants()) do
-        hookSwitchVisuals(obj)
-    end
-
-    turboGui.DescendantAdded:Connect(function(obj)
-        task.defer(function()
-            hookSwitchVisuals(obj)
-        end)
-    end)
-end
-
--- =========================================================
--- INPUTS: INSERT
--- =========================================================
-
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.KeyCode == Enum.KeyCode.Insert then
-        toggleMenu()
-        return
-    end
-end)
-
--- =========================================================
--- LOCK ACQUISITION SOUND
--- =========================================================
-
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if not turboGui or not turboGui.Parent then return end
-
-    if input.KeyCode == Enum.KeyCode.LeftAlt then
-        turboPlay("lock", "lock.ogg", "select.ogg", 0.30)
-    elseif input.KeyCode == Enum.KeyCode.RightAlt then
-        turboPlay("lock", "lock.ogg", "select.ogg", 0.30)
-    end
-end)
-
--- Preload interaction sounds so first hover/click is instant.
-task.spawn(function()
-    turboRuntimeSound("hover", "hover.ogg", "click.ogg", 0.16)
-    turboRuntimeSound("click", "click.ogg", "select.ogg", 0.28)
-    turboRuntimeSound("select", "select.ogg", "click.ogg", 0.28)
-    turboRuntimeSound("menuOpen", "gui_open.ogg", "click.ogg", 0.40)
-    turboRuntimeSound("menuClose", "gui_close.ogg", "click.ogg", 0.34)
-    turboRuntimeSound("lock", "lock.ogg", "select.ogg", 0.30)
-end)
-
-print("[Turbo] Premium Hover + Click: ON")
-print("[Turbo] Button Click FX: ON")
-print("[Turbo] Tab Transition FX: ON")
-print("[Turbo] Toggle/Switch FX: ON")
-print("[Turbo] Insert Menu Animation: ON")
-print("[Turbo] Panic Confirmation: ON")
-print("[Turbo] Alt/RightAlt Lock Sound: ON")
-
-end
-
--- =========================================================
--- LOADING SCREEN EXIT
--- =========================================================
-
-task.wait(0.35)
-
-if not turboGui then
-    -- Keep the loader visible so the user can see that Main failed instead
-    -- of leaving an apparently blank game.
-    local status = Screen:FindFirstChild("Status", true)
-    if status and status:IsA("TextLabel") then
-        status.Text = mainCompileError and "MAIN COMPILE ERROR"
-            or mainRunError and "MAIN RUNTIME ERROR"
-            or "TURBO GUI NOT CREATED"
-        status.TextColor3 = Color3.fromRGB(220, 70, 85)
-    end
-
-    warn("[Turbo] Loader kept open because Turbo GUI was not created.")
+    warn("[Turbo] Loader stopped:", errorText)
     return
 end
-
-playSound(
-    "open",
-    "gui_open.ogg",
-    "click.ogg",
-    0.36
-)
-
+task.wait(0.35)
+pcall(function()
+    playSound("open", "gui_open.ogg", "click.ogg", 0.36)
+end)
 for _, obj in ipairs(Screen:GetDescendants()) do
     if obj:IsA("TextLabel") then
         TweenService:Create(
@@ -1182,16 +1208,11 @@ for _, obj in ipairs(Screen:GetDescendants()) do
         ):Play()
     end
 end
-
 task.wait(0.5)
-
 if Screen then
     Screen:Destroy()
 end
-
-print("[Turbo] Premium Loader initialized | V8 Protected")
-print("[Turbo] Premium Hover + Click + Tabs: ON")
-print("[Turbo] Insert Animation + Sounds: ON")
-print("[Turbo] Panic Confirmation: ON")
-print("[Turbo] Alt/RightAlt Lock Sound: ON")
-print("[Turbo] DisplayOrder: MAX")
+print("[Turbo] Loader initialized.")
+print("[Turbo] Loading Screen: ON")
+print("[Turbo] Asset Cache: ON")
+print("[Turbo] Main: EXECUTED")
