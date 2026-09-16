@@ -55,10 +55,11 @@ local Config = {
 	FrontAngle      = 360,
 
 	IgnoreAllies = {
-		Enabled   = false,
-		UseUserId = true,
-		UserIds   = {},
-		Names     = {},
+		Enabled     = false,
+		UseUserId   = true,
+		UserIds     = {},
+		Names       = {},
+		EntityNames = {},
 	},
 
 	TargetPriority = "Players",
@@ -164,7 +165,7 @@ local qHoldStart, lastBehindTime = 0, 0
 local isTeleporting = false
 local isHoldingMouse, mousePressTime = false, 0
 local grabConnections = {}
-local allyUserIdSet, allyNameSet = {}, {}
+local allyUserIdSet, allyNameSet, allyEntityNameSet = {}, {}, {}
 local smoothedAimPos, smoothedAimTarget = nil, nil
 local targetHistory = {}
 local lastRetarget = 0
@@ -251,15 +252,24 @@ local BAD_NAME_KEYWORDS = {
 local function rebuildAllyCache()
 	table.clear(allyUserIdSet)
 	table.clear(allyNameSet)
-	if not Config.IgnoreAllies.Enabled then return end
-	if Config.IgnoreAllies.UseUserId then
-		for _, id in ipairs(Config.IgnoreAllies.UserIds) do
-			allyUserIdSet[tonumber(id)] = true
+	table.clear(allyEntityNameSet)
+	local cfg = Config.IgnoreAllies
+	if type(cfg) ~= "table" or not cfg.Enabled then return end
+	if type(cfg.UserIds) ~= "table" then cfg.UserIds = {} end
+	if type(cfg.Names) ~= "table" then cfg.Names = {} end
+	if type(cfg.EntityNames) ~= "table" then cfg.EntityNames = {} end
+	if cfg.UseUserId then
+		for _, id in ipairs(cfg.UserIds) do
+			local n = tonumber(id)
+			if n then allyUserIdSet[n] = true end
 		end
 	else
-		for _, name in ipairs(Config.IgnoreAllies.Names) do
+		for _, name in ipairs(cfg.Names) do
 			allyNameSet[string.lower(tostring(name))] = true
 		end
+	end
+	for _, name in ipairs(cfg.EntityNames) do
+		allyEntityNameSet[string.lower(tostring(name))] = true
 	end
 end
 
@@ -601,13 +611,15 @@ local function isInIgnoredFolder(model)
 end
 
 local function isAllyModel(model)
-	if not Config.IgnoreAllies.Enabled then return false end
+	if not Config.IgnoreAllies.Enabled or not model then return false end
 	local plr = Players:GetPlayerFromCharacter(model)
-	if not plr then return false end
-	if Config.IgnoreAllies.UseUserId then
-		return allyUserIdSet[plr.UserId] == true
+	if plr then
+		if Config.IgnoreAllies.UseUserId then
+			return allyUserIdSet[plr.UserId] == true
+		end
+		return allyNameSet[string.lower(plr.Name)] == true
 	end
-	return allyNameSet[string.lower(plr.Name)] == true
+	return allyEntityNameSet[string.lower(model.Name)] == true
 end
 
 local function isInFront(hrp)
@@ -760,6 +772,7 @@ end
 -- o que pode mudar em 1 frame: vivo, root, distância, counter, grab.
 local function isStillValidTarget(model)
 	if not model or model == character then return false end
+	if isAllyModel(model) then return false end
 	if not model.Parent or not model:IsDescendantOf(workspace) then invalidateModelCache(model) return false end
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then invalidateModelCache(model) return false end
@@ -1091,7 +1104,7 @@ local function getClosestTarget()
 	local minDSq = (minD > 0) and (minD * minD) or 0
 	local prio = Config.TargetPriority
 	for _, model in ipairs(candidateList) do
-		if model.Parent and model ~= character then
+		if model.Parent and model ~= character and not isAllyModel(model) then
 			local hrp = getRoot(model)
 			if hrp then
 				local hp = hrp.Position
@@ -2619,66 +2632,143 @@ local function buildGUI()
 	-- Whitelist
 	do
 		local cAlly = Card(pWL.L, "Ally Filter", "eye")
-		Toggle(cAlly, "Whitelist Allies", function() return Config.IgnoreAllies.Enabled end, function(v) Config.IgnoreAllies.Enabled = v; rebuildAllyCache() end)
+		Toggle(cAlly, "Whitelist Allies", function() return Config.IgnoreAllies.Enabled end, function(v)
+			Config.IgnoreAllies.Enabled = v
+			rebuildAllyCache()
+		end)
 		Dropdown(cAlly, "Mode", {"UserId", "Name"},
 			function() return Config.IgnoreAllies.UseUserId and "UserId" or "Name" end,
-			function(v) Config.IgnoreAllies.UseUserId = (v == "UserId"); rebuildAllyCache() end)
+			function(v)
+				Config.IgnoreAllies.UseUserId = (v == "UserId")
+				rebuildAllyCache()
+			end)
 
-		local cPl = Card(pWL.R, "Players in Server", "contacts")
+		local cPl = Card(pWL.R, "Players & Local Entities", "contacts")
 		local plScroll = New("ScrollingFrame", {
-			Size = UDim2.new(1, 0, 0, 320), BackgroundTransparency = 1, BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 0, 420), BackgroundTransparency = 1, BorderSizePixel = 0,
 			ScrollBarThickness = 4, ScrollBarImageColor3 = Theme.Accent,
 			CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		}, cPl)
-		New("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.Name}, plScroll)
+		New("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, plScroll)
 
 		local function isWL(plr)
 			if Config.IgnoreAllies.UseUserId then
-				for _, id in ipairs(Config.IgnoreAllies.UserIds) do if tonumber(id) == plr.UserId then return true end end
+				for _, id in ipairs(Config.IgnoreAllies.UserIds or {}) do
+					if tonumber(id) == plr.UserId then return true end
+				end
 			else
 				local w = string.lower(plr.Name)
-				for _, n in ipairs(Config.IgnoreAllies.Names) do if string.lower(tostring(n)) == w then return true end end
+				for _, n in ipairs(Config.IgnoreAllies.Names or {}) do
+					if string.lower(tostring(n)) == w then return true end
+				end
 			end
 			return false
 		end
+
 		local function setWL(plr, val)
+			Config.IgnoreAllies.UserIds = Config.IgnoreAllies.UserIds or {}
+			Config.IgnoreAllies.Names = Config.IgnoreAllies.Names or {}
 			if Config.IgnoreAllies.UseUserId then
 				local ids = Config.IgnoreAllies.UserIds
-				for i = #ids, 1, -1 do if tonumber(ids[i]) == plr.UserId then table.remove(ids, i) end end
+				for i = #ids, 1, -1 do
+					if tonumber(ids[i]) == plr.UserId then table.remove(ids, i) end
+				end
 				if val then table.insert(ids, plr.UserId) end
 			else
 				local names = Config.IgnoreAllies.Names
-				for i = #names, 1, -1 do if string.lower(tostring(names[i])) == string.lower(plr.Name) then table.remove(names, i) end end
+				for i = #names, 1, -1 do
+					if string.lower(tostring(names[i])) == string.lower(plr.Name) then table.remove(names, i) end
+				end
 				if val then table.insert(names, plr.Name) end
 			end
 			rebuildAllyCache()
 		end
-		local function rebuildPL()
-			for _, c in ipairs(plScroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-			for _, plr in ipairs(Players:GetPlayers()) do
-				if plr ~= player then
-					local on = isWL(plr)
-					local b = New("TextButton", {
-						Size = UDim2.new(1, -4, 0, 30), BackgroundColor3 = on and Color3.fromRGB(40, 70, 50) or Theme.Element,
-						BorderSizePixel = 0, Text = "  " .. plr.Name .. (on and "  ✓" or ""),
-						TextColor3 = Theme.Text, TextSize = 12, Font = Enum.Font.GothamMedium,
-						TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false,
-					}, plScroll)
-					Corner(b, 6)
-					b.Activated:Connect(function()
-						setWL(plr, not isWL(plr))
-						local now = isWL(plr)
-						b.BackgroundColor3 = now and Color3.fromRGB(40, 70, 50) or Theme.Element
-						b.Text = "  " .. plr.Name .. (now and "  ✓" or "")
-					end)
+
+		local function isEntityWL(model)
+			local wanted = string.lower(model.Name)
+			for _, n in ipairs(Config.IgnoreAllies.EntityNames or {}) do
+				if string.lower(tostring(n)) == wanted then return true end
+			end
+			return false
+		end
+
+		local function setEntityWL(model, val)
+			Config.IgnoreAllies.EntityNames = Config.IgnoreAllies.EntityNames or {}
+			local names = Config.IgnoreAllies.EntityNames
+			local wanted = string.lower(model.Name)
+			for i = #names, 1, -1 do
+				if string.lower(tostring(names[i])) == wanted then table.remove(names, i) end
+			end
+			if val then table.insert(names, model.Name) end
+			rebuildAllyCache()
+		end
+
+		local function getLocalEntities()
+			local result, seen = {}, {}
+			local ok, descendants = pcall(function() return workspace:GetDescendants() end)
+			if not ok or not descendants then return result end
+			for _, obj in ipairs(descendants) do
+				if obj:IsA("Model") and obj ~= character and not seen[obj]
+					and not Players:GetPlayerFromCharacter(obj)
+					and not isInIgnoredFolder(obj) and not hasBadName(obj) then
+					local hum = obj:FindFirstChildOfClass("Humanoid")
+					if hum and hum.Health > 0 and getRoot(obj) and isRealCharacter(obj) then
+						seen[obj] = true
+						table.insert(result, obj)
+					end
 				end
 			end
+			table.sort(result, function(a, b) return string.lower(a.Name) < string.lower(b.Name) end)
+			return result
 		end
+
+		local function addEntry(label, checked, onClick, layoutOrder)
+			local b = New("TextButton", {
+				Size = UDim2.new(1, -4, 0, 30),
+				BackgroundColor3 = checked and Color3.fromRGB(40, 70, 50) or Theme.Element,
+				BorderSizePixel = 0, Text = "  " .. label .. (checked and "  ✓" or ""),
+				TextColor3 = Theme.Text, TextSize = 12, Font = Enum.Font.GothamMedium,
+				TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, LayoutOrder = layoutOrder or 0,
+			}, plScroll)
+			Corner(b, 6)
+			b.Activated:Connect(function()
+				onClick()
+			end)
+		end
+
+		local function rebuildPL()
+			for _, c in ipairs(plScroll:GetChildren()) do
+				if c:IsA("TextButton") then c:Destroy() end
+			end
+			local order = 0
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr ~= player then
+					order += 1
+					addEntry("[PLAYER] " .. plr.Name, isWL(plr), function()
+						setWL(plr, not isWL(plr))
+						rebuildPL()
+					end, order)
+				end
+			end
+			for _, entity in ipairs(getLocalEntities()) do
+				order += 1
+				addEntry("[ENTITY] " .. entity.Name, isEntityWL(entity), function()
+					setEntityWL(entity, not isEntityWL(entity))
+					rebuildPL()
+				end, order)
+			end
+		end
+
 		rebuildPL()
 		Players.PlayerAdded:Connect(rebuildPL)
 		Players.PlayerRemoving:Connect(rebuildPL)
+		workspace.DescendantAdded:Connect(function(obj)
+			if obj:IsA("Model") then task.defer(rebuildPL) end
+		end)
+		workspace.DescendantRemoving:Connect(function(obj)
+			if obj:IsA("Model") then task.defer(rebuildPL) end
+		end)
 	end
-
 	-- Settings
 	do
 		local cPrio = Card(pST.L, "Target Priority", "target")
@@ -3071,6 +3161,8 @@ local function buildGUI()
 					if typeof(loadedAccent) == "Color3" then applyAccent(loadedAccent) end
 				end
 				if type(Config.LockKeys) ~= "table" then error("LockKeys inválido") end
+				if type(Config.IgnoreAllies) ~= "table" then Config.IgnoreAllies = {} end
+				Config.IgnoreAllies.EntityNames = Config.IgnoreAllies.EntityNames or {}
 				rebuildAllyCache()
 				applyAccent(Theme.Accent)
 				for _, upd in ipairs(controlUpdaters) do pcall(upd) end
